@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "hilight70ed264d": {
+      "service": "Cognito",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [],
+      "customAuth": false
+    }
+  }
+}
