@@ -1,5 +1,13 @@
-type Note @model {
-  id: ID!
-  name: String!
-  description: String
+enum LearningStatus {
+  UNKNOWN
+  LEARNING
+  KNOWN
 }
+
+type Word @model @auth(rules: [{allow: public}]) {
+  id: ID!
+  stem: String!
+  variants: String
+  status: LearningStatus
+}
+ 

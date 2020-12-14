@@ -2,61 +2,152 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { API } from 'aws-amplify';
 import { withAuthenticator, AmplifySignOut } from '@aws-amplify/ui-react';
-import { listNotes } from './graphql/queries';
-import { createNote as createNoteMutation, deleteNote as deleteNoteMutation } from './graphql/mutations';
 
-const initialFormState = { name: '', description: '' }
+import { DataStore } from '@aws-amplify/datastore';
+import { Word, LearningStatus } from './models';
+import natural from 'natural';
+import HighlightedWord from './HighlightedWord'
+
+const initialFormState = { description: '' }
 
 function App() {
-  const [notes, setNotes] = useState([]);
+  const [words, setWords] = useState([]);
+  const [knownWords, setKnownWords] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
 
   useEffect(() => {
-    fetchNotes();
+    fetchKnownWords();
   }, []);
 
-  async function fetchNotes() {
-    const apiData = await API.graphql({ query: listNotes });
-    setNotes(apiData.data.listNotes.items);
+  async function fetchKnownWords() {
+    const fetchedSeenWords = await DataStore.query(Word);
+    console.log("Words retrieved successfully!", JSON.stringify(fetchedSeenWords, null, 2));
+    setKnownWords(fetchedSeenWords);
   }
 
-  async function createNote() {
-    if (!formData.name || !formData.description) return;
-    await API.graphql({ query: createNoteMutation, variables: { input: formData } });
-    setNotes([ ...notes, formData ]);
+  async function storeWord(word) {
+    await DataStore.save(word);
+  }
+
+  async function handleNewWord(token) {
+    const existingWords = await DataStore.query(Word, word => word.stem("eq", token), {
+      limit: 1
+    })
+    if (existingWords.length===0 || typeof existingWords[0] === 'undefined') {
+      console.log("didn't find in datastore, saving ", token)
+      var newWord = new Word({
+        "stem": token,
+        "variants": token,
+        "status": LearningStatus.UNKNOWN
+      })
+      storeWord(newWord);
+      return newWord
+    } else {
+      console.log("EXISTING WORD OBJECT")
+      console.log(existingWords[0])
+      return existingWords[0]
+    }
+  }
+
+  async function lookForNewWords(tokens) {
+    var newKnownWords = [];
+    var newWords = [];
+    for (const token of tokens) {
+      var wordifiedToken = ""
+      console.log("token is :", token)
+      const cachedWord = knownWords.find(word => word.stem === token)
+      console.log("cachedWord is :", cachedWord)
+      if (!cachedWord) {
+        console.log("looking in datastore")
+        wordifiedToken = await handleNewWord(token)
+        console.log("wordified token after handle is: ", wordifiedToken.stem)
+        newKnownWords.push(wordifiedToken)
+      } else {
+        console.log("found known: ", cachedWord.stem)
+        wordifiedToken = cachedWord
+      }
+      newWords.push(wordifiedToken)
+    }
+    const [one, two] = await Promise.all([newWords, newKnownWords])
+    console.log("new words: ")
+    console.log(one)
+    console.log("new known words are: ")
+    console.log(two);
+    return [one, two];
+  }
+
+  async function saveWords() {
+    words.forEach(word => console.log(word));
+    if (!formData.description) return;
+    var tokenizer = new natural.WordTokenizer();
+    const tokenized = tokenizer.tokenize(formData.description);
+    console.log("tokenized:", tokenized)
+    const [newWords, newKnownWords] = await lookForNewWords(tokenized)
+    setWords([...words, ...newWords])
+    setKnownWords([...knownWords, ...newKnownWords])
     setFormData(initialFormState);
   }
 
-  async function deleteNote({ id }) {
-    const newNotesArray = notes.filter(note => note.id !== id);
-    setNotes(newNotesArray);
-    await API.graphql({ query: deleteNoteMutation, variables: { input: { id } }});
+  // async function deleteNote({ id }) {
+  //   const newNotesArray = words.filter(word => word.id !== id);
+  //   setWords(newNotesArray);
+  //   const modelToDelete = await DataStore.query(Word, id);
+  //   DataStore.delete(modelToDelete);
+  // }
+
+  async function refreshWordColors(updatedWordStem) {
+    const updatedWords = await DataStore.query(Word, word => word.stem("eq", updatedWordStem), {
+      limit: 1
+    })
+
+    const updatedWord = updatedWords[0];
+
+    console.log(updatedWord)
+
+    setWords(words.map(word => {
+      //console.log("checking for update: ", word.stem)
+      if (word.stem !== updatedWordStem) {
+        return word
+      } else {
+        console.log("UPDATING THIS WORD: ", word.stem);
+        console.log(word)
+        console.log("NEW")
+        console.log(updatedWord)
+        return updatedWord
+      }
+    }));
+
   }
 
   return (
     <div className="App">
       <h1>My Notes App</h1>
-      <input
-        onChange={e => setFormData({ ...formData, 'name': e.target.value})}
-        placeholder="Note name"
-        value={formData.name}
-      />
-      <input
-        onChange={e => setFormData({ ...formData, 'description': e.target.value})}
+      <textarea
+        onChange={e => setFormData({ ...formData, 'description': e.target.value })}
         placeholder="Note description"
         value={formData.description}
+        style={{
+          height: "200px", 
+          width:"800px"
+      }}
       />
-      <button onClick={createNote}>Create Note</button>
-      <div style={{marginBottom: 30}}>
-        {
-          notes.map(note => (
-            <div key={note.id || note.name}>
-              <h2>{note.name}</h2>
-              <p>{note.description}</p>
-              <button onClick={() => deleteNote(note)}>Delete note</button>
-            </div>
-          ))
-        }
+      <button onClick={saveWords}>Create Text</button>
+      <div style={{ marginBottom: 30 }}>
+        <div >
+          <p>{words.length}</p>
+        </div>
+        <div style={{
+          margin: "0px auto",
+          width: "400px"
+        }}>{
+            words.map(word => {
+                return <div key={word.id || word.stem}>
+                  <HighlightedWord updateParent={refreshWordColors}>{word}</HighlightedWord>
+                </div>
+              }
+            )
+          }
+        </div>
       </div>
       <AmplifySignOut />
     </div>
