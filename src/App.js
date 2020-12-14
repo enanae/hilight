@@ -20,8 +20,9 @@ function App() {
   }, []);
 
   async function fetchKnownWords() {
-    const fetchedSeenWords = await DataStore.query(Word);
-    console.log("Words retrieved successfully!", JSON.stringify(fetchedSeenWords, null, 2));
+    var fetchedSeenWords = await DataStore.clear() 
+    fetchedSeenWords = await DataStore.query(Word);
+    // console.log("Words retrieved successfully!", JSON.stringify(fetchedSeenWords, null, 2));
     setKnownWords(fetchedSeenWords);
   }
 
@@ -33,8 +34,8 @@ function App() {
     const existingWords = await DataStore.query(Word, word => word.stem("eq", token), {
       limit: 1
     })
-    if (existingWords.length===0 || typeof existingWords[0] === 'undefined') {
-      console.log("didn't find in datastore, saving ", token)
+    if (existingWords.length === 0 || typeof existingWords[0] === 'undefined') {
+      // console.log("didn't find in datastore, saving ", token)
       var newWord = new Word({
         "stem": token,
         "variants": token,
@@ -43,8 +44,8 @@ function App() {
       storeWord(newWord);
       return newWord
     } else {
-      console.log("EXISTING WORD OBJECT")
-      console.log(existingWords[0])
+      // console.log("EXISTING WORD OBJECT")
+      // console.log(existingWords[0])
       return existingWords[0]
     }
   }
@@ -54,34 +55,35 @@ function App() {
     var newWords = [];
     for (const token of tokens) {
       var wordifiedToken = ""
-      console.log("token is :", token)
+      // console.log("token is :", token)
       const cachedWord = knownWords.find(word => word.stem === token)
-      console.log("cachedWord is :", cachedWord)
+      // console.log("cachedWord is :", cachedWord)
       if (!cachedWord) {
-        console.log("looking in datastore")
+        // console.log("looking in datastore")
         wordifiedToken = await handleNewWord(token)
-        console.log("wordified token after handle is: ", wordifiedToken.stem)
+        // console.log("wordified token after handle is: ", wordifiedToken.stem)
         newKnownWords.push(wordifiedToken)
       } else {
-        console.log("found known: ", cachedWord.stem)
+        // console.log("found known: ", cachedWord.stem)
         wordifiedToken = cachedWord
       }
       newWords.push(wordifiedToken)
     }
     const [one, two] = await Promise.all([newWords, newKnownWords])
-    console.log("new words: ")
-    console.log(one)
-    console.log("new known words are: ")
-    console.log(two);
+    // console.log("new words: ")
+    // console.log(one)
+    // console.log("new known words are: ")
+    // console.log(two);
     return [one, two];
   }
 
   async function saveWords() {
     words.forEach(word => console.log(word));
     if (!formData.description) return;
-    var tokenizer = new natural.WordTokenizer();
-    const tokenized = tokenizer.tokenize(formData.description);
-    console.log("tokenized:", tokenized)
+    // var tokenizer = new natural.WordTokenizer();
+    // const tokenized = tokenizer.tokenize(formData.description);
+    const tokenized = formData.description.split(" ")
+    // console.log("tokenized:", tokenized)
     const [newWords, newKnownWords] = await lookForNewWords(tokenized)
     setWords([...words, ...newWords])
     setKnownWords([...knownWords, ...newKnownWords])
@@ -109,10 +111,22 @@ function App() {
       if (word.stem !== updatedWordStem) {
         return word
       } else {
-        console.log("UPDATING THIS WORD: ", word.stem);
-        console.log(word)
-        console.log("NEW")
-        console.log(updatedWord)
+        // console.log("UPDATING THIS WORD: ", word.stem);
+        // console.log(word)
+        // console.log("NEW")
+        // console.log(updatedWord)
+        return updatedWord
+      }
+    }));
+    setKnownWords(knownWords.map(word => {
+      //console.log("checking for update: ", word.stem)
+      if (word.stem !== updatedWordStem) {
+        return word
+      } else {
+        // console.log("UPDATING THIS KNOWN WORD: ", word.stem);
+        // console.log(word)
+        // console.log("NEW")
+        // console.log(updatedWord)
         return updatedWord
       }
     }));
@@ -121,15 +135,15 @@ function App() {
 
   return (
     <div className="App">
-      <h1>My Notes App</h1>
+      <h1>Vocab Highlighter</h1>
       <textarea
         onChange={e => setFormData({ ...formData, 'description': e.target.value })}
         placeholder="Note description"
         value={formData.description}
         style={{
-          height: "200px", 
-          width:"800px"
-      }}
+          height: "200px",
+          width: "800px"
+        }}
       />
       <button onClick={saveWords}>Create Text</button>
       <div style={{ marginBottom: 30 }}>
@@ -141,10 +155,10 @@ function App() {
           width: "400px"
         }}>{
             words.map(word => {
-                return <div key={word.id || word.stem}>
-                  <HighlightedWord updateParent={refreshWordColors}>{word}</HighlightedWord>
-                </div>
-              }
+              return <div>
+                <HighlightedWord updateParent={refreshWordColors}>{word}</HighlightedWord>
+              </div>
+            }
             )
           }
         </div>
