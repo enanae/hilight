@@ -14,12 +14,12 @@ function HighlightedWord({children, updateParent}) {
         } else if (status === LearningStatus.KNOWN) {
             newColor = "green"
         }
-        console.log("setting color to ", newColor)
+        // console.log("setting color to ", newColor)
         setColor(newColor);
     }
 
     useEffect(() => {
-        console.log("word child changed to ", children.status)
+        // console.log("word child changed to ", children.status)
         const newColor = updateColor(children.status)
         
     }, [children]);

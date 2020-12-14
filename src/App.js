@@ -82,7 +82,7 @@ function App() {
     if (!formData.description) return;
     // var tokenizer = new natural.WordTokenizer();
     // const tokenized = tokenizer.tokenize(formData.description);
-    const tokenized = formData.description.split(" ")
+    const tokenized = formData.description.split(/\s+/)
     // console.log("tokenized:", tokenized)
     const [newWords, newKnownWords] = await lookForNewWords(tokenized)
     setWords([...words, ...newWords])
@@ -133,6 +133,10 @@ function App() {
 
   }
 
+  function clearWords() {
+    setWords([])
+  }
+
   return (
     <div className="App">
       <h1>Vocab Highlighter</h1>
@@ -145,14 +149,18 @@ function App() {
           width: "800px"
         }}
       />
-      <button onClick={saveWords}>Create Text</button>
+      <div>
+        <button onClick={saveWords}>Create Text</button>
+        <button onClick={clearWords}>Clear Text</button>
+      </div>
+      
       <div style={{ marginBottom: 30 }}>
         <div >
           <p>{words.length}</p>
         </div>
         <div style={{
           margin: "0px auto",
-          width: "400px"
+          width: "500px"
         }}>{
             words.map(word => {
               return <div>
