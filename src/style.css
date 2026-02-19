@@ -153,6 +153,10 @@ html, body {
   transition: background 0.2s;
 }
 
+.upload-area.hidden {
+  display: none;
+}
+
 .upload-area:hover, .upload-area.drag-over {
   background: var(--accent-dim);
 }
@@ -219,9 +223,13 @@ html, body {
 
 /* === Reader === */
 .reader-area {
-  display: flex;
+  display: none;
   flex-direction: column;
   height: 100%;
+}
+
+.reader-area.open {
+  display: flex;
 }
 
 .reader-toolbar {
@@ -301,8 +309,12 @@ html, body {
   border-right: 1px solid var(--border);
   box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   z-index: 100;
-  display: flex;
+  display: none;
   flex-direction: column;
+}
+
+.toc-panel.open {
+  display: flex;
 }
 
 .toc-header {

@@ -64,7 +64,7 @@ function renderApp() {
           <div class="upload-icon">&#128214;</div>
           <h2>Drop an epub file here</h2>
           <p>or click to browse</p>
-          <input type="file" id="file-input" accept=".epub" hidden />
+          <input type="file" id="file-input" accept=".epub,application/epub+zip,application/octet-stream" hidden />
           <div class="upload-hint">
             <p>Every word starts highlighted. Click a word to cycle:</p>
             <span class="demo-word demo-unknown">unknown</span>
@@ -77,7 +77,7 @@ function renderApp() {
         </div>
       </div>
 
-      <div id="reader-area" class="reader-area" hidden>
+      <div id="reader-area" class="reader-area">
         <div class="reader-toolbar">
           <button id="btn-toc" class="toolbar-btn" title="Table of contents">&#9776; TOC</button>
           <span id="book-title" class="book-title"></span>
@@ -90,7 +90,7 @@ function renderApp() {
         </div>
       </div>
 
-      <div id="toc-panel" class="toc-panel" hidden>
+      <div id="toc-panel" class="toc-panel">
         <div class="toc-header">
           <strong>Table of Contents</strong>
           <button id="btn-close-toc" class="toolbar-btn">&#10005;</button>
@@ -136,7 +136,8 @@ function bindEvents() {
   const uploadArea = document.getElementById('upload-area');
   const fileInput = document.getElementById('file-input');
 
-  // File upload
+  // File upload — stop propagation so the input click doesn't re-trigger the area click
+  fileInput.addEventListener('click', (e) => e.stopPropagation());
   uploadArea.addEventListener('click', () => fileInput.click());
   uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -152,7 +153,9 @@ function bindEvents() {
     if (file && file.name.endsWith('.epub')) openBook(file);
   });
   fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) openBook(fileInput.files[0]);
+    const file = fileInput.files[0];
+    if (file && file.name.endsWith('.epub')) openBook(file);
+    fileInput.value = '';
   });
 
   // Language select
@@ -200,8 +203,8 @@ async function openBook(file) {
   const readerArea = document.getElementById('reader-area');
   const viewer = document.getElementById('epub-viewer');
 
-  uploadArea.hidden = true;
-  readerArea.hidden = false;
+  uploadArea.classList.add('hidden');
+  readerArea.classList.add('open');
 
   await loadEpub(file, viewer, currentLanguage, {
     onStatsUpdate: updateStats,
@@ -221,20 +224,19 @@ async function openBook(file) {
     const href = e.target.dataset.href;
     if (href) {
       goToHref(href);
-      document.getElementById('toc-panel').hidden = true;
+      document.getElementById('toc-panel').classList.remove('open');
     }
   });
 }
 
 function closeBook() {
-  document.getElementById('reader-area').hidden = true;
-  document.getElementById('upload-area').hidden = false;
-  document.getElementById('toc-panel').hidden = true;
+  document.getElementById('reader-area').classList.remove('open');
+  document.getElementById('upload-area').classList.remove('hidden');
+  document.getElementById('toc-panel').classList.remove('open');
 }
 
 function toggleToc() {
-  const panel = document.getElementById('toc-panel');
-  panel.hidden = !panel.hidden;
+  document.getElementById('toc-panel').classList.toggle('open');
 }
 
 async function updateStats() {
