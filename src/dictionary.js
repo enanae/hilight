@@ -3,35 +3,41 @@
  * Supports pluggable dictionary APIs per language.
  *
  * Built-in support:
- * - Free Dictionary API (English): https://dictionaryapi.dev/
+ * - Free Dictionary API: https://dictionaryapi.dev/
+ *   Works well for English, partial support for other languages.
  * - Custom URL template: user provides a URL with {word} placeholder
  */
 
 const SETTINGS_KEY = 'hilight-dict-settings';
 
-/** Built-in dictionary API configs. */
-const BUILTIN_APIS = {
-  en: {
+/** Parse response from dictionaryapi.dev (same format for all languages). */
+function parseDictApiDev(data) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const entry = data[0];
+  const meanings = entry.meanings || [];
+  const defs = [];
+  for (const m of meanings) {
+    for (const d of (m.definitions || []).slice(0, 2)) {
+      defs.push({ partOfSpeech: m.partOfSpeech, definition: d.definition });
+    }
+  }
+  if (defs.length === 0) return null;
+  return {
+    word: entry.word,
+    phonetic: entry.phonetic || '',
+    definitions: defs,
+  };
+}
+
+/** Built-in dictionary API configs for all supported languages. */
+const BUILTIN_APIS = {};
+for (const code of ['en', 'es', 'fr', 'de', 'it', 'pt', 'ko', 'ja', 'zh', 'ar', 'ru', 'hi', 'th', 'vi', 'tr', 'pl', 'nl', 'sv']) {
+  BUILTIN_APIS[code] = {
     name: 'Free Dictionary API',
-    urlTemplate: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}',
-    parse(data) {
-      if (!Array.isArray(data) || data.length === 0) return null;
-      const entry = data[0];
-      const meanings = entry.meanings || [];
-      const defs = [];
-      for (const m of meanings) {
-        for (const d of (m.definitions || []).slice(0, 2)) {
-          defs.push({ partOfSpeech: m.partOfSpeech, definition: d.definition });
-        }
-      }
-      return {
-        word: entry.word,
-        phonetic: entry.phonetic || '',
-        definitions: defs,
-      };
-    },
-  },
-};
+    urlTemplate: `https://api.dictionaryapi.dev/api/v2/entries/${code}/{word}`,
+    parse: parseDictApiDev,
+  };
+}
 
 /** Load saved dictionary settings from localStorage. */
 export function loadDictSettings() {
