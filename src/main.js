@@ -66,7 +66,7 @@ function renderApp() {
           <p>or click to browse</p>
           <input type="file" id="file-input" accept=".epub,application/epub+zip,application/octet-stream" hidden />
           <div class="upload-hint">
-            <p>Every word starts highlighted. Click a word to cycle:</p>
+            <p>Every word starts highlighted. Tap a word to cycle:</p>
             <span class="demo-word demo-unknown">unknown</span>
             &#8594;
             <span class="demo-word demo-partial">learning</span>
@@ -74,6 +74,7 @@ function renderApp() {
             <span class="demo-word demo-known">known</span>
             &#8594; ...
           </div>
+          <p class="upload-gutenberg">Need an epub? Browse free books at <a href="https://www.gutenberg.org/browse/languages/" target="_blank" rel="noopener">Project Gutenberg</a></p>
         </div>
       </div>
 
@@ -138,7 +139,11 @@ function bindEvents() {
 
   // File upload — stop propagation so the input click doesn't re-trigger the area click
   fileInput.addEventListener('click', (e) => e.stopPropagation());
-  uploadArea.addEventListener('click', () => fileInput.click());
+  uploadArea.addEventListener('click', (e) => {
+    // Don't open file picker when clicking links
+    if (e.target.closest('a')) return;
+    fileInput.click();
+  });
   uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
     uploadArea.classList.add('drag-over');
@@ -259,11 +264,7 @@ function openSettings() {
   document.getElementById('dict-name').value = current?.name || '';
 
   const builtinNote = document.getElementById('dict-builtin-note');
-  if (currentLanguage === 'en') {
-    builtinNote.textContent = 'English has a built-in free dictionary. You can override it with a custom API.';
-  } else {
-    builtinNote.textContent = '';
-  }
+  builtinNote.textContent = 'A built-in free dictionary is included. You can override it with a custom API.';
 
   modal.classList.add('open');
 }

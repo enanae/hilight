@@ -65,22 +65,65 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
       span.dataset.word = norm;
       span.dataset.level = level;
       span.dataset.language = language;
-      span.title = `${seg.text} — ${LEVEL_LABELS[level]}`;
 
-      span.addEventListener('click', (e) => handleWordClick(e, span, onStatsUpdate));
       frag.appendChild(span);
     }
 
     node.parentNode.replaceChild(frag, node);
   }
 
+  // Set up delegated event handlers on the body (once per document)
+  if (!doc.body._hlBound) {
+    doc.body._hlBound = true;
+    setupDelegatedHandlers(doc, onStatsUpdate);
+  }
+
   if (onStatsUpdate) onStatsUpdate();
 }
 
-async function handleWordClick(e, span, onStatsUpdate) {
-  e.preventDefault();
-  e.stopPropagation();
+/**
+ * Set up delegated click and touch handlers on the iframe body.
+ * Uses touchend with a movement threshold for reliable mobile taps.
+ */
+function setupDelegatedHandlers(doc, onStatsUpdate) {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const TAP_THRESHOLD = 10; // px — allow small finger movement
 
+  // Track touch start position
+  doc.body.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+  }, { passive: true });
+
+  // Handle taps via touchend (fires reliably on mobile, unlike click)
+  doc.body.addEventListener('touchend', (e) => {
+    const span = e.target.closest('.hl-word');
+    if (!span) return;
+
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+
+    // Only treat as a tap if finger didn't move much
+    if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
+      e.preventDefault();
+      handleWordClick(span, onStatsUpdate);
+    }
+  });
+
+  // Desktop click handler
+  doc.body.addEventListener('click', (e) => {
+    const span = e.target.closest('.hl-word');
+    if (!span) return;
+    e.preventDefault();
+    e.stopPropagation();
+    handleWordClick(span, onStatsUpdate);
+  });
+}
+
+async function handleWordClick(span, onStatsUpdate) {
   const doc = span.ownerDocument;
   const word = span.dataset.word;
   const language = span.dataset.language;
@@ -96,7 +139,6 @@ async function handleWordClick(e, span, onStatsUpdate) {
     .forEach(el => {
       el.dataset.level = level;
       el.className = `hl-word ${LEVEL_CLASSES[level]}`;
-      el.title = `${el.textContent} — ${LEVEL_LABELS[level]}`;
     });
 
   if (onStatsUpdate) onStatsUpdate();
@@ -141,14 +183,18 @@ async function showDefinition(anchor, language, word) {
 
   positionPopup(popup, anchor, doc);
 
-  // Close on outside click (listen on iframe document)
+  // Close on outside click/tap (listen on iframe document)
   const close = (e) => {
-    if (!popup.contains(e.target) && e.target !== anchor) {
+    if (!popup.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
       popup.remove();
       doc.removeEventListener('click', close);
+      doc.removeEventListener('touchend', close);
     }
   };
-  setTimeout(() => doc.addEventListener('click', close), 10);
+  setTimeout(() => {
+    doc.addEventListener('click', close);
+    doc.addEventListener('touchend', close);
+  }, 50);
 }
 
 function positionPopup(popup, anchor, doc) {
