@@ -101,27 +101,49 @@ function injectStyles(doc) {
     body {
       background: #12121a !important;
       color: #e0dfe6 !important;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(168, 85, 247, 0.2);
+    }
+    /* Force all text to light color on dark background */
+    * {
+      color: inherit !important;
+    }
+    a, a:link, a:visited, a:active {
+      color: #a78bfa !important;
+      text-decoration: underline;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #e0dfe6 !important;
+    }
+    img {
+      max-width: 100%;
     }
     .hl-word {
       cursor: pointer;
       border-radius: 2px;
       transition: background-color 0.15s ease;
-      padding: 0 1px;
+      padding: 1px 2px;
     }
-    .hl-unknown {
+    .hl-word.hl-unknown {
       background-color: rgba(192, 132, 252, 0.18);
       border-bottom: 2px solid rgba(192, 132, 252, 0.6);
+      color: #e0dfe6 !important;
     }
-    .hl-partial {
+    .hl-word.hl-partial {
       background-color: rgba(96, 165, 250, 0.15);
       border-bottom: 2px solid rgba(96, 165, 250, 0.5);
+      color: #e0dfe6 !important;
     }
-    .hl-known {
+    .hl-word.hl-known {
       background-color: transparent;
       border-bottom: none;
+      color: #e0dfe6 !important;
     }
     .hl-word:hover {
       filter: brightness(1.2);
+    }
+    .hl-word:active {
+      transform: scale(0.97);
     }
     .hl-popup {
       position: fixed;
