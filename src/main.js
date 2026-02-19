@@ -1,3 +1,4 @@
+import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary } from './dictionary.js';
