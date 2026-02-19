@@ -98,6 +98,10 @@ export function goToHref(href) {
 function injectStyles(doc) {
   const style = doc.createElement('style');
   style.textContent = `
+    body {
+      background: #12121a !important;
+      color: #e0dfe6 !important;
+    }
     .hl-word {
       cursor: pointer;
       border-radius: 2px;
@@ -105,43 +109,44 @@ function injectStyles(doc) {
       padding: 0 1px;
     }
     .hl-unknown {
-      background-color: rgba(255, 200, 50, 0.35);
-      border-bottom: 2px solid rgba(255, 160, 0, 0.6);
+      background-color: rgba(192, 132, 252, 0.18);
+      border-bottom: 2px solid rgba(192, 132, 252, 0.6);
     }
     .hl-partial {
-      background-color: rgba(100, 180, 255, 0.3);
-      border-bottom: 2px solid rgba(60, 130, 220, 0.5);
+      background-color: rgba(96, 165, 250, 0.15);
+      border-bottom: 2px solid rgba(96, 165, 250, 0.5);
     }
     .hl-known {
       background-color: transparent;
       border-bottom: none;
     }
     .hl-word:hover {
-      filter: brightness(0.9);
+      filter: brightness(1.2);
     }
     .hl-popup {
       position: fixed;
       z-index: 10000;
-      background: #fff;
-      border: 1px solid #ccc;
+      background: #1a1a26;
+      border: 1px solid #2a2a3a;
       border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(168,85,247,0.1);
       padding: 12px 16px;
       max-width: 340px;
       min-width: 200px;
       font-size: 14px;
       line-height: 1.5;
       font-family: system-ui, sans-serif;
-      color: #222;
+      color: #e0dfe6;
     }
     .hl-popup-word {
       font-weight: 700;
       font-size: 16px;
       margin-bottom: 6px;
+      color: #a855f7;
     }
     .hl-popup-phonetic {
       font-weight: 400;
-      color: #666;
+      color: #6b6a7a;
       font-size: 13px;
     }
     .hl-popup-defs {
@@ -152,11 +157,11 @@ function injectStyles(doc) {
       margin-bottom: 4px;
     }
     .hl-popup-defs em {
-      color: #888;
+      color: #6b6a7a;
       font-style: italic;
     }
     .hl-popup-loading, .hl-popup-empty {
-      color: #888;
+      color: #6b6a7a;
       font-style: italic;
     }
   `;

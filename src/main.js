@@ -100,7 +100,8 @@ function renderApp() {
     </main>
 
     <!-- Settings modal -->
-    <div id="settings-modal" class="modal" hidden>
+    <div id="settings-modal" class="modal">
+      <div class="modal-backdrop"></div>
       <div class="modal-content">
         <div class="modal-header">
           <h2>Dictionary Settings</h2>
@@ -178,9 +179,11 @@ function bindEvents() {
   // Close book
   document.getElementById('btn-close-book').addEventListener('click', closeBook);
 
-  // Settings
+  // Settings modal
   document.getElementById('btn-settings').addEventListener('click', openSettings);
   document.getElementById('btn-close-settings').addEventListener('click', closeSettings);
+  document.querySelector('#settings-modal .modal-backdrop').addEventListener('click', closeSettings);
+  document.querySelector('#settings-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
   document.getElementById('btn-save-dict').addEventListener('click', saveDict);
   document.getElementById('btn-clear-dict').addEventListener('click', clearDict);
 
@@ -260,22 +263,34 @@ function openSettings() {
     builtinNote.textContent = '';
   }
 
-  modal.hidden = false;
+  modal.classList.add('open');
 }
 
 function closeSettings() {
-  document.getElementById('settings-modal').hidden = true;
+  document.getElementById('settings-modal').classList.remove('open');
 }
 
 function saveDict() {
   const url = document.getElementById('dict-url').value.trim();
   const name = document.getElementById('dict-name').value.trim() || 'Custom Dictionary';
-  if (!url) return;
+  if (!url) {
+    document.getElementById('dict-url').focus();
+    return;
+  }
 
   const settings = loadDictSettings();
   settings[currentLanguage] = { urlTemplate: url, name };
   saveDictSettings(settings);
-  closeSettings();
+
+  // Flash save confirmation
+  const btn = document.getElementById('btn-save-dict');
+  btn.textContent = 'Saved!';
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = 'Save';
+    btn.disabled = false;
+    closeSettings();
+  }, 600);
 }
 
 function clearDict() {
