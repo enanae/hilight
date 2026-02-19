@@ -136,7 +136,8 @@ function bindEvents() {
   const uploadArea = document.getElementById('upload-area');
   const fileInput = document.getElementById('file-input');
 
-  // File upload
+  // File upload — stop propagation so the input click doesn't re-trigger the area click
+  fileInput.addEventListener('click', (e) => e.stopPropagation());
   uploadArea.addEventListener('click', () => fileInput.click());
   uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
