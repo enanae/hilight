@@ -1,9 +1,13 @@
 /**
  * Epub reader: loads an epub file and renders it into a container,
  * then hands off to the highlighter for word processing.
+ *
+ * Event handling uses epubjs's rendition event passthrough system.
+ * This avoids cross-iframe touch event issues — epubjs already listens
+ * for DOM events inside the iframe and re-emits them on the rendition.
  */
 import ePub from 'epubjs';
-import { highlightContainer } from './highlighter.js';
+import { highlightContainer, handleWordTap } from './highlighter.js';
 
 let currentBook = null;
 let currentRendition = null;
@@ -47,29 +51,104 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     height: '100%',
     spread: 'none',
     flow: 'scrolled-doc',
+    // allow-scripts in sandbox — required for touch events on mobile.
+    // Without this, the iframe sandbox="allow-same-origin" blocks
+    // touch event delivery on iOS/Android.
+    allowScriptedContent: true,
   });
 
   currentRendition = rendition;
 
-  // After each section renders, highlight words
+  // After each section renders, highlight words and fix iframe for touch
   rendition.hooks.content.register(async (contents) => {
     const doc = contents.document;
-    const body = doc.body;
 
-    // Inject highlight styles into the epub iframe
     injectStyles(doc);
 
-    await highlightContainer(body, language, { onStatsUpdate: options.onStatsUpdate });
+    // Fix iframe element from parent context
+    const iframe = viewerEl.querySelector('iframe');
+    if (iframe) {
+      iframe.style.touchAction = 'manipulation';
+      iframe.removeAttribute('scrolling');
+    }
+
+    await highlightContainer(doc.body, language, { onStatsUpdate: options.onStatsUpdate });
 
     if (options.onChapterChange) {
-      const loc = rendition.currentLocation();
-      options.onChapterChange(loc);
+      options.onChapterChange(rendition.currentLocation());
     }
   });
+
+  // Word tap handling via epubjs's event passthrough system.
+  // epubjs listens for DOM events inside the iframe and re-emits them
+  // on the rendition — this works reliably across iframe boundaries.
+  setupWordTapHandler(rendition, options.onStatsUpdate);
 
   await rendition.display();
 
   return { book, rendition };
+}
+
+/**
+ * Set up word tap handling through the rendition event system.
+ *
+ * Two layers:
+ * 1. rendition.on('click') — desktop + some mobile browsers
+ * 2. rendition.on('touchend') — reliable on mobile; uses touchstart
+ *    position tracking to distinguish taps from scrolls
+ */
+function setupWordTapHandler(rendition, onStatsUpdate) {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let lastTapTime = 0;
+  const TAP_THRESHOLD = 10;
+  const DEBOUNCE_MS = 300;
+
+  rendition.on('touchstart', (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }
+  });
+
+  rendition.on('touchend', (e) => {
+    if (!e.changedTouches || !e.changedTouches[0]) return;
+
+    const span = findWordSpan(e.target);
+    if (!span) return;
+
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+
+    if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
+      const now = Date.now();
+      if (now - lastTapTime < DEBOUNCE_MS) return;
+      lastTapTime = now;
+      handleWordTap(span, onStatsUpdate);
+    }
+  });
+
+  rendition.on('click', (e) => {
+    const span = findWordSpan(e.target);
+    if (!span) return;
+
+    const now = Date.now();
+    if (now - lastTapTime < DEBOUNCE_MS) return;
+    lastTapTime = now;
+    handleWordTap(span, onStatsUpdate);
+  });
+}
+
+/**
+ * Walk up from event target to find a .hl-word span.
+ * e.target may be a text node on some browsers, so handle that.
+ */
+function findWordSpan(target) {
+  if (!target) return null;
+  // Text nodes don't have closest(), walk to parent element
+  const el = target.nodeType === 3 ? target.parentElement : target;
+  return el?.closest?.('.hl-word') || null;
 }
 
 /** Navigate to next page/section. */
@@ -103,6 +182,8 @@ function injectStyles(doc) {
       color: #e0dfe6 !important;
       touch-action: manipulation;
       -webkit-tap-highlight-color: rgba(168, 85, 247, 0.2);
+      -webkit-user-select: none;
+      user-select: none;
     }
     /* Force all text to light color on dark background */
     * {

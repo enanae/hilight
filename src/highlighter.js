@@ -1,6 +1,9 @@
 /**
  * Highlighter: processes text content inside a container element,
  * wrapping each word in a clickable span with vocab-level styling.
+ *
+ * This module is PURELY about DOM manipulation — no event handlers.
+ * Event handling is done in epub-reader.js via epubjs's rendition events.
  */
 import { tokenize, normalizeWord } from './tokenizer.js';
 import { getLevel, setLevel, getLevels } from './vocab-store.js';
@@ -12,7 +15,6 @@ export const LEVEL_PARTIAL = 1;
 export const LEVEL_KNOWN = 2;
 
 const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
-const LEVEL_LABELS = ['Unknown', 'Learning', 'Known'];
 
 /**
  * Highlight all words in a container element.
@@ -72,58 +74,14 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
     node.parentNode.replaceChild(frag, node);
   }
 
-  // Set up delegated event handlers on the body (once per document)
-  if (!doc.body._hlBound) {
-    doc.body._hlBound = true;
-    setupDelegatedHandlers(doc, onStatsUpdate);
-  }
-
   if (onStatsUpdate) onStatsUpdate();
 }
 
 /**
- * Set up delegated click and touch handlers on the iframe body.
- * Uses touchend with a movement threshold for reliable mobile taps.
+ * Handle a tap/click on a word span.
+ * Called from epub-reader.js via rendition events.
  */
-function setupDelegatedHandlers(doc, onStatsUpdate) {
-  let touchStartX = 0;
-  let touchStartY = 0;
-  const TAP_THRESHOLD = 10; // px — allow small finger movement
-
-  // Track touch start position
-  doc.body.addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    touchStartX = t.clientX;
-    touchStartY = t.clientY;
-  }, { passive: true });
-
-  // Handle taps via touchend (fires reliably on mobile, unlike click)
-  doc.body.addEventListener('touchend', (e) => {
-    const span = e.target.closest('.hl-word');
-    if (!span) return;
-
-    const t = e.changedTouches[0];
-    const dx = Math.abs(t.clientX - touchStartX);
-    const dy = Math.abs(t.clientY - touchStartY);
-
-    // Only treat as a tap if finger didn't move much
-    if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
-      e.preventDefault();
-      handleWordClick(span, onStatsUpdate);
-    }
-  });
-
-  // Desktop click handler
-  doc.body.addEventListener('click', (e) => {
-    const span = e.target.closest('.hl-word');
-    if (!span) return;
-    e.preventDefault();
-    e.stopPropagation();
-    handleWordClick(span, onStatsUpdate);
-  });
-}
-
-async function handleWordClick(span, onStatsUpdate) {
+export async function handleWordTap(span, onStatsUpdate) {
   const doc = span.ownerDocument;
   const word = span.dataset.word;
   const language = span.dataset.language;
@@ -134,7 +92,7 @@ async function handleWordClick(span, onStatsUpdate) {
 
   await setLevel(language, word, level);
 
-  // Update ALL spans for this word in the iframe document
+  // Update ALL spans for this word in the document
   doc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(language)}"]`)
     .forEach(el => {
       el.dataset.level = level;
@@ -143,7 +101,7 @@ async function handleWordClick(span, onStatsUpdate) {
 
   if (onStatsUpdate) onStatsUpdate();
 
-  // Show dictionary popup if going to partial (first click)
+  // Show dictionary popup on first click (unknown -> learning)
   if (level === 1 && hasDictionary(language)) {
     showDefinition(span, language, word);
   }
@@ -152,14 +110,13 @@ async function handleWordClick(span, onStatsUpdate) {
 async function showDefinition(anchor, language, word) {
   const doc = anchor.ownerDocument;
 
-  // Remove any existing popup in the iframe
+  // Remove any existing popup
   doc.querySelectorAll('.hl-popup').forEach(el => el.remove());
 
   const popup = doc.createElement('div');
   popup.className = 'hl-popup';
   popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
 
-  // Append to the iframe body so positioning is correct
   doc.body.appendChild(popup);
   positionPopup(popup, anchor, doc);
 
@@ -183,7 +140,7 @@ async function showDefinition(anchor, language, word) {
 
   positionPopup(popup, anchor, doc);
 
-  // Close on outside click/tap (listen on iframe document)
+  // Close on any outside interaction
   const close = (e) => {
     if (!popup.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
       popup.remove();
@@ -204,7 +161,6 @@ function positionPopup(popup, anchor, doc) {
   popup.style.left = `${rect.left}px`;
   popup.style.top = `${rect.bottom + 4}px`;
 
-  // Keep within viewport
   requestAnimationFrame(() => {
     const pr = popup.getBoundingClientRect();
     if (pr.right > win.innerWidth - 10) {
