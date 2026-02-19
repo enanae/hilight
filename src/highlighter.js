@@ -20,10 +20,11 @@ const LEVEL_LABELS = ['Unknown', 'Learning', 'Known'];
  */
 export async function highlightContainer(container, language, { onStatsUpdate } = {}) {
   const locale = langToLocale(language);
+  const doc = container.ownerDocument;
 
   // Collect all text nodes
   const textNodes = [];
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     if (walker.currentNode.textContent.trim()) {
       textNodes.push(walker.currentNode);
@@ -48,17 +49,17 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
   for (let i = 0; i < textNodes.length; i++) {
     const node = textNodes[i];
     const segs = nodeSegments[i];
-    const frag = document.createDocumentFragment();
+    const frag = doc.createDocumentFragment();
 
     for (const seg of segs) {
       if (!seg.isWord) {
-        frag.appendChild(document.createTextNode(seg.text));
+        frag.appendChild(doc.createTextNode(seg.text));
         continue;
       }
 
       const norm = normalizeWord(seg.text);
       const level = levels.get(norm) || 0;
-      const span = document.createElement('span');
+      const span = doc.createElement('span');
       span.textContent = seg.text;
       span.className = `hl-word ${LEVEL_CLASSES[level]}`;
       span.dataset.word = norm;
@@ -80,6 +81,7 @@ async function handleWordClick(e, span, onStatsUpdate) {
   e.preventDefault();
   e.stopPropagation();
 
+  const doc = span.ownerDocument;
   const word = span.dataset.word;
   const language = span.dataset.language;
   let level = parseInt(span.dataset.level, 10);
@@ -89,8 +91,8 @@ async function handleWordClick(e, span, onStatsUpdate) {
 
   await setLevel(language, word, level);
 
-  // Update ALL spans for this word on the page
-  document.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(language)}"]`)
+  // Update ALL spans for this word in the iframe document
+  doc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(language)}"]`)
     .forEach(el => {
       el.dataset.level = level;
       el.className = `hl-word ${LEVEL_CLASSES[level]}`;
@@ -106,16 +108,18 @@ async function handleWordClick(e, span, onStatsUpdate) {
 }
 
 async function showDefinition(anchor, language, word) {
-  // Remove any existing popup
-  document.querySelectorAll('.hl-popup').forEach(el => el.remove());
+  const doc = anchor.ownerDocument;
 
-  const popup = document.createElement('div');
+  // Remove any existing popup in the iframe
+  doc.querySelectorAll('.hl-popup').forEach(el => el.remove());
+
+  const popup = doc.createElement('div');
   popup.className = 'hl-popup';
   popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
 
-  // Position near the word
-  document.body.appendChild(popup);
-  positionPopup(popup, anchor);
+  // Append to the iframe body so positioning is correct
+  doc.body.appendChild(popup);
+  positionPopup(popup, anchor, doc);
 
   const result = await lookupWord(language, word);
 
@@ -135,19 +139,20 @@ async function showDefinition(anchor, language, word) {
     popup.innerHTML = html;
   }
 
-  positionPopup(popup, anchor);
+  positionPopup(popup, anchor, doc);
 
-  // Close on outside click
+  // Close on outside click (listen on iframe document)
   const close = (e) => {
     if (!popup.contains(e.target) && e.target !== anchor) {
       popup.remove();
-      document.removeEventListener('click', close);
+      doc.removeEventListener('click', close);
     }
   };
-  setTimeout(() => document.addEventListener('click', close), 10);
+  setTimeout(() => doc.addEventListener('click', close), 10);
 }
 
-function positionPopup(popup, anchor) {
+function positionPopup(popup, anchor, doc) {
+  const win = doc.defaultView;
   const rect = anchor.getBoundingClientRect();
   popup.style.position = 'fixed';
   popup.style.left = `${rect.left}px`;
@@ -156,10 +161,10 @@ function positionPopup(popup, anchor) {
   // Keep within viewport
   requestAnimationFrame(() => {
     const pr = popup.getBoundingClientRect();
-    if (pr.right > window.innerWidth - 10) {
-      popup.style.left = `${window.innerWidth - pr.width - 10}px`;
+    if (pr.right > win.innerWidth - 10) {
+      popup.style.left = `${win.innerWidth - pr.width - 10}px`;
     }
-    if (pr.bottom > window.innerHeight - 10) {
+    if (pr.bottom > win.innerHeight - 10) {
       popup.style.top = `${rect.top - pr.height - 4}px`;
     }
   });
