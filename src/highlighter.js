@@ -1,0 +1,181 @@
+/**
+ * Highlighter: processes text content inside a container element,
+ * wrapping each word in a clickable span with vocab-level styling.
+ */
+import { tokenize, normalizeWord } from './tokenizer.js';
+import { getLevel, setLevel, getLevels } from './vocab-store.js';
+import { lookupWord, hasDictionary } from './dictionary.js';
+
+/** Level constants */
+export const LEVEL_UNKNOWN = 0;
+export const LEVEL_PARTIAL = 1;
+export const LEVEL_KNOWN = 2;
+
+const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
+const LEVEL_LABELS = ['Unknown', 'Learning', 'Known'];
+
+/**
+ * Highlight all words in a container element.
+ * Walks the DOM, finds text nodes, replaces them with word spans.
+ */
+export async function highlightContainer(container, language, { onStatsUpdate } = {}) {
+  const locale = langToLocale(language);
+
+  // Collect all text nodes
+  const textNodes = [];
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (walker.currentNode.textContent.trim()) {
+      textNodes.push(walker.currentNode);
+    }
+  }
+
+  // Gather all unique words for a bulk lookup
+  const allWords = new Set();
+  const nodeSegments = [];
+  for (const node of textNodes) {
+    const segs = tokenize(node.textContent, locale);
+    nodeSegments.push(segs);
+    for (const seg of segs) {
+      if (seg.isWord) allWords.add(normalizeWord(seg.text));
+    }
+  }
+
+  // Bulk fetch levels
+  const levels = await getLevels(language, [...allWords]);
+
+  // Replace each text node with spans
+  for (let i = 0; i < textNodes.length; i++) {
+    const node = textNodes[i];
+    const segs = nodeSegments[i];
+    const frag = document.createDocumentFragment();
+
+    for (const seg of segs) {
+      if (!seg.isWord) {
+        frag.appendChild(document.createTextNode(seg.text));
+        continue;
+      }
+
+      const norm = normalizeWord(seg.text);
+      const level = levels.get(norm) || 0;
+      const span = document.createElement('span');
+      span.textContent = seg.text;
+      span.className = `hl-word ${LEVEL_CLASSES[level]}`;
+      span.dataset.word = norm;
+      span.dataset.level = level;
+      span.dataset.language = language;
+      span.title = `${seg.text} — ${LEVEL_LABELS[level]}`;
+
+      span.addEventListener('click', (e) => handleWordClick(e, span, onStatsUpdate));
+      frag.appendChild(span);
+    }
+
+    node.parentNode.replaceChild(frag, node);
+  }
+
+  if (onStatsUpdate) onStatsUpdate();
+}
+
+async function handleWordClick(e, span, onStatsUpdate) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const word = span.dataset.word;
+  const language = span.dataset.language;
+  let level = parseInt(span.dataset.level, 10);
+
+  // Cycle: unknown(0) -> partial(1) -> known(2) -> unknown(0)
+  level = (level + 1) % 3;
+
+  await setLevel(language, word, level);
+
+  // Update ALL spans for this word on the page
+  document.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(language)}"]`)
+    .forEach(el => {
+      el.dataset.level = level;
+      el.className = `hl-word ${LEVEL_CLASSES[level]}`;
+      el.title = `${el.textContent} — ${LEVEL_LABELS[level]}`;
+    });
+
+  if (onStatsUpdate) onStatsUpdate();
+
+  // Show dictionary popup if going to partial (first click)
+  if (level === 1 && hasDictionary(language)) {
+    showDefinition(span, language, word);
+  }
+}
+
+async function showDefinition(anchor, language, word) {
+  // Remove any existing popup
+  document.querySelectorAll('.hl-popup').forEach(el => el.remove());
+
+  const popup = document.createElement('div');
+  popup.className = 'hl-popup';
+  popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
+
+  // Position near the word
+  document.body.appendChild(popup);
+  positionPopup(popup, anchor);
+
+  const result = await lookupWord(language, word);
+
+  if (!result || result.definitions.length === 0) {
+    popup.innerHTML = `<div class="hl-popup-empty">No definition found for "<strong>${escapeHtml(word)}</strong>"</div>`;
+  } else {
+    let html = `<div class="hl-popup-word">${escapeHtml(result.word)}`;
+    if (result.phonetic) html += ` <span class="hl-popup-phonetic">${escapeHtml(result.phonetic)}</span>`;
+    html += '</div><ul class="hl-popup-defs">';
+    for (const d of result.definitions) {
+      html += '<li>';
+      if (d.partOfSpeech) html += `<em>${escapeHtml(d.partOfSpeech)}</em> `;
+      html += escapeHtml(d.definition);
+      html += '</li>';
+    }
+    html += '</ul>';
+    popup.innerHTML = html;
+  }
+
+  positionPopup(popup, anchor);
+
+  // Close on outside click
+  const close = (e) => {
+    if (!popup.contains(e.target) && e.target !== anchor) {
+      popup.remove();
+      document.removeEventListener('click', close);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', close), 10);
+}
+
+function positionPopup(popup, anchor) {
+  const rect = anchor.getBoundingClientRect();
+  popup.style.position = 'fixed';
+  popup.style.left = `${rect.left}px`;
+  popup.style.top = `${rect.bottom + 4}px`;
+
+  // Keep within viewport
+  requestAnimationFrame(() => {
+    const pr = popup.getBoundingClientRect();
+    if (pr.right > window.innerWidth - 10) {
+      popup.style.left = `${window.innerWidth - pr.width - 10}px`;
+    }
+    if (pr.bottom > window.innerHeight - 10) {
+      popup.style.top = `${rect.top - pr.height - 4}px`;
+    }
+  });
+}
+
+function escapeHtml(str) {
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el.innerHTML;
+}
+
+function langToLocale(lang) {
+  const map = {
+    en: 'en', es: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt',
+    ko: 'ko', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', hi: 'hi',
+    th: 'th', vi: 'vi', tr: 'tr', pl: 'pl', nl: 'nl', sv: 'sv',
+  };
+  return map[lang] || lang;
+}
