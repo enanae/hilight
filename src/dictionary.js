@@ -1,21 +1,111 @@
 /**
- * Dictionary API integration.
- * Supports pluggable dictionary APIs per language.
+ * Dictionary API integration with multiple providers.
  *
- * Built-in support:
- * - Free Dictionary API: https://dictionaryapi.dev/
- *   v2 for English (Wiktionary-sourced), v1 for other languages
- *   (Google Dictionary-sourced, kept for backward compatibility).
- * - Custom URL template: user provides a URL with {word} placeholder
+ * Built-in providers:
+ * - Wiktionary REST API (free, excellent multi-language coverage)
+ * - Free Dictionary API v2 (dictionaryapi.dev, English only)
+ * - Custom URL template (user provides a URL with {word} placeholder)
+ *
+ * Each language has a default provider. Users can override per-language
+ * via the settings modal (choose a provider or supply a custom URL).
  */
 
 const SETTINGS_KEY = 'hilight-dict-settings';
 
+// ─── Providers ────────────────────────────────────────────────────────
+
 /**
- * Parse v2 response from dictionaryapi.dev (English).
+ * Registry of built-in dictionary providers.
+ * Each provider has: name, buildUrl(lang, word), parse(data, lang).
+ */
+export const PROVIDERS = {
+  wiktionary: {
+    id: 'wiktionary',
+    name: 'Wiktionary',
+    description: 'Free, excellent coverage for all languages',
+    // The definition endpoint only exists on en.wiktionary.org,
+    // but it returns entries for words in all languages, keyed by lang code.
+    buildUrl: (_lang, word) =>
+      `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`,
+    parse: parseWiktionary,
+  },
+
+  'free-dict': {
+    id: 'free-dict',
+    name: 'Free Dictionary API',
+    description: 'Good for English; limited other-language support',
+    buildUrl: (lang, word) =>
+      `https://api.dictionaryapi.dev/api/v2/entries/${lang}/${encodeURIComponent(word)}`,
+    parse: parseFreeDictV2,
+  },
+};
+
+/** Default provider per language. */
+const DEFAULT_PROVIDER = {
+  en: 'free-dict',
+  // Everything else falls back to wiktionary
+};
+
+function getDefaultProviderId(lang) {
+  return DEFAULT_PROVIDER[lang] || 'wiktionary';
+}
+
+// ─── Parsers ──────────────────────────────────────────────────────────
+
+/** Strip HTML tags from a string. */
+function stripHtml(html) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+/**
+ * Parse Wiktionary REST API response.
+ * Response shape: { "<lang>": [ { partOfSpeech, language, definitions: [{ definition }] } ] }
+ * Definitions contain HTML which we strip.
+ */
+function parseWiktionary(data, lang) {
+  if (!data || typeof data !== 'object') return null;
+
+  // The response is keyed by language code. Try the requested language first,
+  // then fall back to any available key.
+  let sections = data[lang];
+  if (!sections || !Array.isArray(sections)) {
+    // Try all keys — the API sometimes uses different codes
+    const keys = Object.keys(data);
+    for (const k of keys) {
+      if (Array.isArray(data[k]) && data[k].length > 0) {
+        sections = data[k];
+        break;
+      }
+    }
+  }
+  if (!sections || sections.length === 0) return null;
+
+  const defs = [];
+  let wordText = '';
+  for (const section of sections) {
+    const pos = section.partOfSpeech || '';
+    for (const d of (section.definitions || []).slice(0, 3)) {
+      const text = stripHtml(d.definition);
+      if (text) {
+        defs.push({ partOfSpeech: pos, definition: text });
+      }
+    }
+  }
+  if (defs.length === 0) return null;
+
+  return {
+    word: wordText || '',
+    phonetic: '',
+    definitions: defs.slice(0, 6),
+  };
+}
+
+/**
+ * Parse Free Dictionary API v2 response.
  * v2 uses "meanings" array with partOfSpeech + definitions array.
  */
-function parseV2(data) {
+function parseFreeDictV2(data) {
   if (!Array.isArray(data) || data.length === 0) return null;
   const entry = data[0];
   const meanings = entry.meanings || [];
@@ -34,109 +124,21 @@ function parseV2(data) {
 }
 
 /**
- * Parse v1 response from dictionaryapi.dev (non-English languages).
- * v1 uses "meaning" object keyed by part of speech, e.g.:
- *   { "meaning": { "nom masculin": [{ "definition": "..." }] } }
+ * Generic parser for custom API responses.
+ * Tries common JSON shapes: v2-style (meanings), v1-style (meaning), flat definitions array.
  */
-function parseV1(data) {
-  if (!Array.isArray(data) || data.length === 0) return null;
-  const entry = data[0];
-  const meaning = entry.meaning || {};
-  const defs = [];
-  for (const [pos, defList] of Object.entries(meaning)) {
-    if (!Array.isArray(defList)) continue;
-    for (const d of defList.slice(0, 2)) {
-      defs.push({ partOfSpeech: pos, definition: d.definition || '' });
-    }
-  }
-  if (defs.length === 0) return null;
-  return {
-    word: entry.word,
-    phonetic: entry.phonetic || '',
-    definitions: defs,
-  };
-}
-
-/** Built-in dictionary API configs. */
-const BUILTIN_APIS = {
-  // English: v2 (Wiktionary-sourced, well maintained)
-  en: {
-    name: 'Free Dictionary API',
-    urlTemplate: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}',
-    parse: parseV2,
-  },
-};
-
-// All other languages: v1 (Google Dictionary-sourced, still served for backward compat)
-for (const code of ['es', 'fr', 'de', 'it', 'pt', 'ko', 'ja', 'zh', 'ar', 'ru', 'hi', 'th', 'vi', 'tr', 'pl', 'nl', 'sv']) {
-  BUILTIN_APIS[code] = {
-    name: 'Free Dictionary API',
-    urlTemplate: `https://api.dictionaryapi.dev/api/v1/entries/${code}/{word}`,
-    parse: parseV1,
-  };
-}
-
-/** Load saved dictionary settings from localStorage. */
-export function loadDictSettings() {
-  try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
-  } catch {
-    return {};
-  }
-}
-
-/** Save dictionary settings. Settings is { [language]: { urlTemplate, name } }. */
-export function saveDictSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-/**
- * Look up a word. Returns { word, phonetic, definitions } or null.
- */
-export async function lookupWord(language, word) {
-  const config = getConfig(language);
-  if (!config) return null;
-
-  const url = config.urlTemplate.replace('{word}', encodeURIComponent(word));
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    if (config.parse) {
-      return config.parse(data);
-    }
-
-    // For custom APIs, try a generic parse: look for common fields
-    return parseGeneric(word, data);
-  } catch {
-    return null;
-  }
-}
-
-function getConfig(language) {
-  const custom = loadDictSettings();
-  if (custom[language]) return custom[language];
-  if (BUILTIN_APIS[language]) return BUILTIN_APIS[language];
-  return null;
-}
-
 function parseGeneric(word, data) {
-  // Handle array responses
   const entry = Array.isArray(data) ? data[0] : data;
   if (!entry) return null;
 
   const definitions = [];
 
-  // Try v2 shape first (meanings array)
   if (entry.meanings) {
     for (const m of entry.meanings) {
       for (const d of (m.definitions || []).slice(0, 2)) {
         definitions.push({ partOfSpeech: m.partOfSpeech || '', definition: d.definition || d.text || '' });
       }
     }
-  // Then v1 shape (meaning object keyed by pos)
   } else if (entry.meaning && typeof entry.meaning === 'object') {
     for (const [pos, defList] of Object.entries(entry.meaning)) {
       if (!Array.isArray(defList)) continue;
@@ -161,7 +163,96 @@ function parseGeneric(word, data) {
   };
 }
 
+// ─── Settings persistence ─────────────────────────────────────────────
+
+/**
+ * Load saved dictionary settings from localStorage.
+ * Shape: { [languageCode]: { provider: string, urlTemplate?: string, name?: string } }
+ */
+export function loadDictSettings() {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+/** Save dictionary settings. */
+export function saveDictSettings(settings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+// ─── Public API ───────────────────────────────────────────────────────
+
+/**
+ * Get the active provider ID for a language (user override or default).
+ */
+export function getActiveProviderId(language) {
+  const settings = loadDictSettings();
+  const saved = settings[language];
+  if (saved?.provider) return saved.provider;
+  return getDefaultProviderId(language);
+}
+
+/**
+ * Get the list of provider IDs available for a language.
+ */
+export function getProviderChoices() {
+  return Object.values(PROVIDERS);
+}
+
+/**
+ * Look up a word. Returns { word, phonetic, definitions } or null.
+ */
+export async function lookupWord(language, word) {
+  const settings = loadDictSettings();
+  const saved = settings[language];
+
+  // Custom URL override (also handles old settings format with urlTemplate but no provider)
+  if (saved?.urlTemplate && (saved.provider === 'custom' || !saved.provider)) {
+    return fetchCustom(saved.urlTemplate, language, word);
+  }
+
+  // Built-in provider
+  const providerId = saved?.provider || getDefaultProviderId(language);
+  const provider = PROVIDERS[providerId];
+  if (!provider) return null;
+
+  const url = provider.buildUrl(language, word);
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = provider.parse(data, language);
+    // Fill in word if parser didn't
+    if (result && !result.word) result.word = word;
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCustom(urlTemplate, language, word) {
+  const url = urlTemplate
+    .replace('{word}', encodeURIComponent(word))
+    .replace('{lang}', language);
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return parseGeneric(word, data);
+  } catch {
+    return null;
+  }
+}
+
 /** Check if a dictionary is configured for a language. */
 export function hasDictionary(language) {
-  return !!getConfig(language);
+  const settings = loadDictSettings();
+  const saved = settings[language];
+  if (saved?.urlTemplate && (saved.provider === 'custom' || !saved.provider)) return true;
+  const providerId = saved?.provider || getDefaultProviderId(language);
+  return !!PROVIDERS[providerId];
 }
