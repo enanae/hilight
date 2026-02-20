@@ -85,11 +85,9 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 
     injectStyles(doc);
 
-    // Fix iframe element from parent context
-    const iframe = viewerEl.querySelector('iframe');
-    if (iframe) {
-      iframe.style.touchAction = 'manipulation';
-    }
+    // Ensure iframe doesn't block touch scroll propagation to the
+    // epub-container (the actual scrollable element in scrolled-doc mode).
+    // Default touch-action=auto is correct — don't override it.
 
     await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
   });
@@ -119,6 +117,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   let longPressFired = false;
   let lastActionTime = 0;
   let hadTouchRecently = false; // suppress synthetic click after touch
+  let hadTouchTimer = null;
   const TAP_THRESHOLD = 10;
   const LONG_PRESS_MS = 500;
   const DEBOUNCE_MS = 300;
@@ -132,6 +131,10 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     touchStartY = t.clientY;
     longPressFired = false;
     hadTouchRecently = true;
+    // Auto-clear after 800ms so scroll gestures (which don't fire click)
+    // don't permanently suppress the next click
+    clearTimeout(hadTouchTimer);
+    hadTouchTimer = setTimeout(() => { hadTouchRecently = false; }, 800);
 
     // Start long-press timer
     const span = findWordSpan(e.target);
@@ -223,7 +226,7 @@ export function nextPage() {
   if (!currentRendition) return;
   const container = getScrollContainer();
   if (container) {
-    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 2;
+    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 5;
     if (!atBottom) {
       container.scrollBy({ top: container.clientHeight - 40, behavior: 'smooth' });
       return;
@@ -237,7 +240,7 @@ export function prevPage() {
   if (!currentRendition) return;
   const container = getScrollContainer();
   if (container) {
-    if (container.scrollTop > 2) {
+    if (container.scrollTop > 5) {
       container.scrollBy({ top: -(container.clientHeight - 40), behavior: 'smooth' });
       return;
     }
@@ -314,6 +317,17 @@ export async function setLanguage(language) {
   currentLanguage = language;
   const doc = getIframeDocument();
   if (doc && doc.body) {
+    // Unwrap existing hl-word spans to avoid double-wrapping.
+    // replaceChild mutates the live NodeList, so collect spans first.
+    const spans = [...doc.querySelectorAll('.hl-word')];
+    for (const span of spans) {
+      const parent = span.parentNode;
+      while (span.firstChild) parent.insertBefore(span.firstChild, span);
+      parent.removeChild(span);
+    }
+    // Merge adjacent text nodes so the tokenizer sees complete words
+    doc.body.normalize();
+
     await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
   }
 }
@@ -336,7 +350,6 @@ function injectStyles(doc) {
     body {
       background: #12121a !important;
       color: #e0dfe6 !important;
-      touch-action: manipulation;
       -webkit-tap-highlight-color: rgba(168, 85, 247, 0.2);
       -webkit-user-select: none;
       user-select: none;
