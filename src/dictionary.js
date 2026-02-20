@@ -63,14 +63,21 @@ function stripHtml(html) {
  * Response shape: { "<lang>": [ { partOfSpeech, language, definitions: [{ definition }] } ] }
  * Definitions contain HTML which we strip.
  */
-function parseWiktionary(data, lang) {
+function parseWiktionary(data, lang, defLang) {
   if (!data || typeof data !== 'object') return null;
 
-  // The response is keyed by language code. Try the requested language first,
-  // then fall back to any available key.
-  let sections = data[lang];
-  if (!sections || !Array.isArray(sections)) {
-    // Try all keys — the API sometimes uses different codes
+  // The response is keyed by language code. Priority:
+  // 1. Try the definition language (user's native language) for bilingual use
+  // 2. Try the book language
+  // 3. Fall back to any available key
+  let sections = null;
+  for (const tryLang of [defLang, lang]) {
+    if (tryLang && Array.isArray(data[tryLang]) && data[tryLang].length > 0) {
+      sections = data[tryLang];
+      break;
+    }
+  }
+  if (!sections) {
     const keys = Object.keys(data);
     for (const k of keys) {
       if (Array.isArray(data[k]) && data[k].length > 0) {
@@ -201,7 +208,20 @@ export function getProviderChoices() {
 }
 
 /**
- * Look up a word. Returns { word, phonetic, definitions } or null.
+ * Get the user's chosen definition language (for bilingual lookup).
+ * Falls back to the book language if not set.
+ */
+function getDefLanguage(bookLanguage) {
+  return localStorage.getItem('hilight-def-lang') || bookLanguage;
+}
+
+/**
+ * Look up a word.
+ * Returns { word, phonetic, definitions } on success,
+ * or { error: 'offline' | 'not-found' } on failure.
+ *
+ * Uses the user's "definition language" preference to select which
+ * language's entries to return from multilingual providers like Wiktionary.
  */
 export async function lookupWord(language, word) {
   const settings = loadDictSettings();
@@ -215,20 +235,23 @@ export async function lookupWord(language, word) {
   // Built-in provider
   const providerId = saved?.provider || getDefaultProviderId(language);
   const provider = PROVIDERS[providerId];
-  if (!provider) return null;
+  if (!provider) return { error: 'not-found' };
 
   const url = provider.buildUrl(language, word);
 
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) return { error: 'not-found' };
     const data = await res.json();
-    const result = provider.parse(data, language);
+    const dl = getDefLanguage(language);
+    const result = provider.parse(data, language, dl);
     // Fill in word if parser didn't
     if (result && !result.word) result.word = word;
-    return result;
-  } catch {
-    return null;
+    return result || { error: 'not-found' };
+  } catch (err) {
+    // Network errors (offline, DNS failure, CORS, timeout)
+    if (err instanceof TypeError) return { error: 'offline' };
+    return { error: 'not-found' };
   }
 }
 
@@ -239,11 +262,12 @@ async function fetchCustom(urlTemplate, language, word) {
 
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) return { error: 'not-found' };
     const data = await res.json();
-    return parseGeneric(word, data);
-  } catch {
-    return null;
+    return parseGeneric(word, data) || { error: 'not-found' };
+  } catch (err) {
+    if (err instanceof TypeError) return { error: 'offline' };
+    return { error: 'not-found' };
   }
 }
 

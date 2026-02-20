@@ -86,6 +86,28 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
 }
 
 /**
+ * Mark all unknown/partial words on the page as known (level 2).
+ * Used by the "Mark page as known" toolbar button.
+ */
+export async function markAllKnown(doc) {
+  const spans = doc.querySelectorAll('.hl-word:not(.hl-known)');
+  const updates = [];
+  const seen = new Set();
+  for (const span of spans) {
+    const word = span.dataset.word;
+    const language = span.dataset.language;
+    const key = `${language}:${word}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      updates.push(setLevel(language, word, LEVEL_KNOWN));
+    }
+    span.dataset.level = LEVEL_KNOWN;
+    span.className = `hl-word ${LEVEL_CLASSES[LEVEL_KNOWN]}`;
+  }
+  await Promise.all(updates);
+}
+
+/**
  * Handle a short tap on a word span — just cycle the knowledge state.
  * Called from epub-reader.js via rendition events.
  */
@@ -139,8 +161,12 @@ async function showDefinition(anchor, language, word) {
 
   const result = await lookupWord(language, word);
 
-  if (!result || result.definitions.length === 0) {
-    popup.innerHTML = `<div class="hl-popup-empty">No definition found for "<strong>${escapeHtml(word)}</strong>"</div>`;
+  if (!result || result.error || !result.definitions || result.definitions.length === 0) {
+    const isOffline = result?.error === 'offline';
+    const msg = isOffline
+      ? `Could not connect. Check your internet connection.`
+      : `No definition found for "<strong>${escapeHtml(word)}</strong>"`;
+    popup.innerHTML = `<div class="hl-popup-empty">${msg}</div>`;
   } else {
     let html = `<div class="hl-popup-word">${escapeHtml(result.word)}`;
     if (result.phonetic) html += ` <span class="hl-popup-phonetic">${escapeHtml(result.phonetic)}</span>`;

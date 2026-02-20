@@ -2,7 +2,7 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
-import { popupActive } from './highlighter.js';
+import { popupActive, markAllKnown } from './highlighter.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -26,6 +26,7 @@ const LANGUAGES = [
 ];
 
 let currentLanguage = localStorage.getItem('hilight-lang') || 'en';
+let defLanguage = localStorage.getItem('hilight-def-lang') || 'en';
 
 /** Initialize the app. */
 function init() {
@@ -42,11 +43,20 @@ function renderApp() {
         <span class="tagline">free epub vocabulary builder</span>
       </div>
       <div class="header-right">
-        <select id="lang-select" aria-label="Language">
-          ${LANGUAGES.map(l =>
-            `<option value="${l.code}" ${l.code === currentLanguage ? 'selected' : ''}>${l.name}</option>`
-          ).join('')}
-        </select>
+        <label class="header-label" for="lang-select">Book:
+          <select id="lang-select" aria-label="Book language">
+            ${LANGUAGES.map(l =>
+              `<option value="${l.code}" ${l.code === currentLanguage ? 'selected' : ''}>${l.name}</option>`
+            ).join('')}
+          </select>
+        </label>
+        <label class="header-label" for="def-lang-select">Defs:
+          <select id="def-lang-select" aria-label="Definition language">
+            ${LANGUAGES.map(l =>
+              `<option value="${l.code}" ${l.code === defLanguage ? 'selected' : ''}>${l.name}</option>`
+            ).join('')}
+          </select>
+        </label>
         <button id="btn-settings" class="icon-btn" title="Dictionary settings">&#9881;</button>
         <button id="btn-export" class="icon-btn" title="Export vocabulary">&#8681;</button>
         <button id="btn-import" class="icon-btn" title="Import vocabulary">&#8679;</button>
@@ -54,9 +64,10 @@ function renderApp() {
     </header>
 
     <div class="stats-bar" id="stats-bar">
-      <span id="stat-unknown" class="stat stat-unknown" title="Unknown words">? 0</span>
-      <span id="stat-partial" class="stat stat-partial" title="Learning">~ 0</span>
-      <span id="stat-known" class="stat stat-known" title="Known">&#10003; 0</span>
+      <span id="stat-unknown" class="stat stat-unknown" title="Unknown words on this page">? 0</span>
+      <span id="stat-partial" class="stat stat-partial" title="Learning words on this page">~ 0</span>
+      <span id="stat-known" class="stat stat-known" title="Known words on this page">&#10003; 0</span>
+      <span id="stat-saved" class="stat stat-saved" title="Total words saved across all pages">&#128218; 0 saved</span>
     </div>
 
     <main class="main-area">
@@ -67,13 +78,14 @@ function renderApp() {
           <p>or click to browse</p>
           <input type="file" id="file-input" accept=".epub,application/epub+zip,application/octet-stream" hidden />
           <div class="upload-hint">
-            <p>Every word starts highlighted. Tap a word to cycle:</p>
+            <p>Every word starts highlighted. <strong>Tap</strong> a word to cycle:</p>
             <span class="demo-word demo-unknown">unknown</span>
             &#8594;
             <span class="demo-word demo-partial">learning</span>
             &#8594;
             <span class="demo-word demo-known">known</span>
             &#8594; ...
+            <p class="hint-secondary"><strong>Long-press</strong> or <strong>double-click</strong> any word for a dictionary definition.</p>
           </div>
           <p class="upload-gutenberg">Need an epub? Browse free books at <a href="https://www.gutenberg.org/browse/languages/" target="_blank" rel="noopener">Project Gutenberg</a></p>
         </div>
@@ -83,6 +95,7 @@ function renderApp() {
         <div class="reader-toolbar">
           <button id="btn-toc" class="toolbar-btn" title="Table of contents">&#9776; TOC</button>
           <span id="book-title" class="book-title"></span>
+          <button id="btn-mark-known" class="toolbar-btn" title="Mark all words on this page as known">&#10003; All known</button>
           <button id="btn-close-book" class="toolbar-btn" title="Close book">&#10005;</button>
         </div>
         <div class="reader-nav">
@@ -170,12 +183,18 @@ function bindEvents() {
     fileInput.value = '';
   });
 
-  // Language select — re-highlights the current section with the new language
+  // Book language — re-highlights the current section with the new language
   document.getElementById('lang-select').addEventListener('change', async (e) => {
     currentLanguage = e.target.value;
     localStorage.setItem('hilight-lang', currentLanguage);
     await setLanguage(currentLanguage);
     updateStats();
+  });
+
+  // Definition language — controls which language definitions are fetched in
+  document.getElementById('def-lang-select').addEventListener('change', (e) => {
+    defLanguage = e.target.value;
+    localStorage.setItem('hilight-def-lang', defLanguage);
   });
 
   // Navigation — suppressed while definition popup is showing
@@ -186,16 +205,36 @@ function bindEvents() {
     if (!popupActive) nextPage();
   });
 
-  // Keyboard nav — suppressed while popup showing or typing in inputs
+  // Keyboard shortcuts — suppressed while popup showing or typing in inputs
   document.addEventListener('keydown', (e) => {
     if (popupActive) return;
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (e.key === 'ArrowLeft') prevPage();
-    if (e.key === 'ArrowRight') nextPage();
-    if (e.key === 'Escape') {
-      closeSettings();
-      document.getElementById('toc-panel').classList.remove('open');
+
+    switch (e.key) {
+      case 'ArrowLeft': prevPage(); break;
+      case 'ArrowRight': nextPage(); break;
+      case 'Escape':
+        closeSettings();
+        document.getElementById('toc-panel').classList.remove('open');
+        break;
+      case 't':
+      case 'T':
+        if (!e.ctrlKey && !e.metaKey) toggleToc();
+        break;
+      case 'k':
+      case 'K':
+        if (!e.ctrlKey && !e.metaKey) {
+          const iframeDoc = getIframeDocument();
+          if (iframeDoc) markAllKnown(iframeDoc).then(updateStats);
+        }
+        break;
+      case 'w':
+      case 'W':
+        if (!e.ctrlKey && !e.metaKey) {
+          if (document.getElementById('reader-area')?.classList.contains('open')) closeBook();
+        }
+        break;
     }
   });
 
@@ -209,6 +248,14 @@ function bindEvents() {
       goToHref(a.dataset.href);
       document.getElementById('toc-panel').classList.remove('open');
     }
+  });
+
+  // Mark all words on page as known
+  document.getElementById('btn-mark-known').addEventListener('click', async () => {
+    const iframeDoc = getIframeDocument();
+    if (!iframeDoc) return;
+    await markAllKnown(iframeDoc);
+    updateStats();
   });
 
   // Close book
@@ -239,17 +286,33 @@ async function openBook(file) {
   uploadArea.classList.add('hidden');
   readerArea.classList.add('open');
 
-  await loadEpub(file, viewer, currentLanguage, {
-    onStatsUpdate: updateStats,
-    onBookLoaded: (meta) => {
-      document.getElementById('book-title').textContent = meta.title;
-    },
-  });
+  try {
+    await loadEpub(file, viewer, currentLanguage, {
+      onStatsUpdate: updateStats,
+      onBookLoaded: (meta) => {
+        document.getElementById('book-title').textContent = meta.title;
+      },
+    });
 
-  // Load TOC (with nested sub-items)
-  const toc = await getToc();
-  const tocList = document.getElementById('toc-list');
-  tocList.innerHTML = renderTocItems(toc, 0);
+    // Load TOC (with nested sub-items)
+    const toc = await getToc();
+    const tocList = document.getElementById('toc-list');
+    tocList.innerHTML = renderTocItems(toc, 0);
+  } catch (err) {
+    console.error('Failed to open epub:', err);
+    closeBook();
+    showError('Could not open this file. Make sure it is a valid .epub file.');
+  }
+}
+
+function showError(msg) {
+  const existing = document.querySelector('.error-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'error-toast';
+  toast.textContent = msg;
+  document.getElementById('app').appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
 }
 
 function renderTocItems(items, depth) {
@@ -276,15 +339,17 @@ function toggleToc() {
 }
 
 async function updateStats() {
-  const stats = await getStats(currentLanguage);
-  // Count unknown words inside the epub iframe (not the parent document)
   const iframeDoc = getIframeDocument();
-  const unknownOnPage = iframeDoc
-    ? iframeDoc.querySelectorAll('.hl-word.hl-unknown').length
-    : 0;
+  // Page-scoped counts: all three from the current page's DOM
+  const unknownOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-unknown').length : 0;
+  const partialOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-partial').length : 0;
+  const knownOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-known').length : 0;
   document.getElementById('stat-unknown').textContent = `? ${unknownOnPage}`;
-  document.getElementById('stat-partial').textContent = `~ ${stats.partial}`;
-  document.getElementById('stat-known').textContent = `\u2713 ${stats.known}`;
+  document.getElementById('stat-partial').textContent = `~ ${partialOnPage}`;
+  document.getElementById('stat-known').textContent = `\u2713 ${knownOnPage}`;
+  // DB total: how many words the user has saved across all pages
+  const stats = await getStats(currentLanguage);
+  document.getElementById('stat-saved').textContent = `\uD83D\uDCDA ${stats.total} saved`;
 }
 
 function openSettings() {
@@ -387,6 +452,13 @@ async function doImport(e) {
   }
   e.target.value = '';
 }
+
+// Warn before navigating away while a book is open (book data is in-memory only)
+window.addEventListener('beforeunload', (e) => {
+  if (document.getElementById('reader-area')?.classList.contains('open')) {
+    e.preventDefault();
+  }
+});
 
 // Boot
 init();

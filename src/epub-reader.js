@@ -13,6 +13,7 @@ let currentBook = null;
 let currentRendition = null;
 let currentLanguage = null;
 let currentOnStatsUpdate = null;
+let languageVersion = 0; // guards against overlapping setLanguage() calls
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
@@ -85,17 +86,27 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 
     injectStyles(doc);
 
-    // Ensure iframe doesn't block touch scroll propagation to the
-    // epub-container (the actual scrollable element in scrolled-doc mode).
-    // Default touch-action=auto is correct — don't override it.
-
-    await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
+    // Show loading overlay while highlighting (can be slow on large chapters)
+    showLoadingOverlay(viewerEl);
+    try {
+      await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
+    } finally {
+      hideLoadingOverlay(viewerEl);
+    }
   });
 
   // Word tap handling via epubjs's event passthrough system.
   setupWordTapHandler(rendition, currentOnStatsUpdate);
 
   await rendition.display();
+
+  // After display, fix the epub-container for iOS momentum scrolling
+  // and add a scroll-to-bottom indicator.
+  const container = getScrollContainer();
+  if (container) {
+    container.style.webkitOverflowScrolling = 'touch';
+    setupEndOfSectionBanner(container, viewerEl);
+  }
 
   return { book, rendition };
 }
@@ -315,6 +326,7 @@ export function goToHref(href) {
  */
 export async function setLanguage(language) {
   currentLanguage = language;
+  const thisVersion = ++languageVersion;
   const doc = getIframeDocument();
   if (doc && doc.body) {
     // Unwrap existing hl-word spans to avoid double-wrapping.
@@ -327,6 +339,9 @@ export async function setLanguage(language) {
     }
     // Merge adjacent text nodes so the tokenizer sees complete words
     doc.body.normalize();
+
+    // Bail out if another setLanguage() call happened while we were unwrapping
+    if (thisVersion !== languageVersion) return;
 
     await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
   }
@@ -343,6 +358,48 @@ export function getIframeDocument() {
   return null;
 }
 
+function showLoadingOverlay(viewerEl) {
+  let overlay = viewerEl.querySelector('.hl-loading-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'hl-loading-overlay';
+    overlay.innerHTML = '<div class="hl-loading-spinner"></div>';
+    viewerEl.style.position = 'relative';
+    viewerEl.appendChild(overlay);
+  }
+  overlay.classList.add('visible');
+}
+
+function hideLoadingOverlay(viewerEl) {
+  const overlay = viewerEl.querySelector('.hl-loading-overlay');
+  if (overlay) overlay.classList.remove('visible');
+}
+
+/**
+ * Show a "next chapter" banner when the user scrolls to the bottom of a section.
+ * Tapping the banner advances to the next section.
+ */
+function setupEndOfSectionBanner(container, viewerEl) {
+  // Create the banner element (lives in the parent document, overlaid on the viewer)
+  let banner = viewerEl.querySelector('.hl-end-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'hl-end-banner';
+    banner.innerHTML = 'Next chapter &#8594;';
+    banner.addEventListener('click', () => {
+      if (currentRendition) currentRendition.next();
+    });
+    viewerEl.style.position = 'relative';
+    viewerEl.appendChild(banner);
+  }
+
+  const onScroll = () => {
+    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
+    banner.classList.toggle('visible', atBottom);
+  };
+  container.addEventListener('scroll', onScroll, { passive: true });
+}
+
 /** Inject highlight CSS into the epub's iframe document. */
 function injectStyles(doc) {
   const style = doc.createElement('style');
@@ -351,6 +408,7 @@ function injectStyles(doc) {
       background: #12121a !important;
       color: #e0dfe6 !important;
       -webkit-tap-highlight-color: rgba(168, 85, 247, 0.2);
+      -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
       /* Prevent iframe body from creating a competing scroll context —
@@ -391,7 +449,7 @@ function injectStyles(doc) {
     }
     .hl-word.hl-known {
       background-color: transparent;
-      border-bottom: none;
+      border-bottom: 1px dotted rgba(52, 211, 153, 0.25);
       color: #e0dfe6 !important;
     }
     .hl-word:hover {
