@@ -36,6 +36,7 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport height — respects mobile browser chrome */
   overflow: hidden;
 }
 
@@ -92,8 +93,8 @@ html, body {
 }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
@@ -284,6 +285,7 @@ html, body {
 .reader-nav {
   display: flex;
   flex: 1;
+  min-height: 0; /* allow flex child to shrink below content size */
   overflow: hidden;
 }
 
@@ -507,6 +509,11 @@ html, body {
 }
 
 /* === Scrollbar === */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }

@@ -25,7 +25,10 @@ function openDB() {
       }
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      dbPromise = null; // allow retry on next call
+      reject(req.error);
+    };
   });
   return dbPromise;
 }
@@ -123,10 +126,16 @@ export async function exportVocab(language) {
   });
 }
 
-/** Import vocab entries (array of {language, word, level}). */
+/** Import vocab entries (array of {language, word, level}). Validates each entry. */
 export async function importVocab(entries) {
+  if (!Array.isArray(entries)) throw new Error('Expected an array');
+  const valid = entries.filter(e =>
+    e && typeof e.language === 'string' && typeof e.word === 'string' &&
+    typeof e.level === 'number' && e.level >= 0 && e.level <= 2
+  );
+  if (valid.length === 0) return;
   const store = await tx('readwrite');
-  return Promise.all(entries.map(e =>
+  return Promise.all(valid.map(e =>
     new Promise((resolve, reject) => {
       const req = store.put(e);
       req.onsuccess = () => resolve();

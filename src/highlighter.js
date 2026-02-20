@@ -19,6 +19,11 @@ const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
 /** True when a definition popup is visible — all other interactions should be suppressed. */
 export let popupActive = false;
 
+/** Reset popup state. Call when iframe content is replaced (chapter nav). */
+export function resetPopupState() {
+  popupActive = false;
+}
+
 /**
  * Highlight all words in a container element.
  * Walks the DOM, finds text nodes, replaces them with word spans.
@@ -43,7 +48,7 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
     const segs = tokenize(node.textContent, locale);
     nodeSegments.push(segs);
     for (const seg of segs) {
-      if (seg.isWord) allWords.add(normalizeWord(seg.text));
+      if (seg.isWord) allWords.add(normalizeWord(seg.text, locale));
     }
   }
 
@@ -62,7 +67,7 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
         continue;
       }
 
-      const norm = normalizeWord(seg.text);
+      const norm = normalizeWord(seg.text, locale);
       const level = levels.get(norm) || 0;
       const span = doc.createElement('span');
       span.textContent = seg.text;
@@ -152,11 +157,13 @@ async function showDefinition(anchor, language, word) {
 
   positionPopup(popup, anchor, doc);
 
-  // Any NEW interaction dismisses the popup and nothing else.
-  // We use touchstart (not touchend) so that lifting the finger
-  // from the long-press gesture that opened the popup doesn't
-  // immediately dismiss it — only a new tap does.
+  // Dismiss popup on any NEW interaction. We gate on a timestamp so that
+  // the synthetic click/touchstart from the same long-press gesture that
+  // opened the popup doesn't immediately close it (~300ms window).
+  const showTime = Date.now();
+  const DISMISS_GUARD_MS = 400;
   const dismiss = (e) => {
+    if (Date.now() - showTime < DISMISS_GUARD_MS) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -165,12 +172,8 @@ async function showDefinition(anchor, language, word) {
     doc.removeEventListener('click', dismiss, true);
     doc.removeEventListener('touchstart', dismiss, true);
   };
-  // Use capture phase so we intercept before anything else sees the event.
-  // Small delay ensures the current event cycle completes first.
-  setTimeout(() => {
-    doc.addEventListener('click', dismiss, true);
-    doc.addEventListener('touchstart', dismiss, true);
-  }, 50);
+  doc.addEventListener('click', dismiss, true);
+  doc.addEventListener('touchstart', dismiss, true);
 }
 
 function positionPopup(popup, anchor, doc) {
@@ -183,7 +186,10 @@ function positionPopup(popup, anchor, doc) {
   requestAnimationFrame(() => {
     const pr = popup.getBoundingClientRect();
     if (pr.right > win.innerWidth - 10) {
-      popup.style.left = `${win.innerWidth - pr.width - 10}px`;
+      popup.style.left = `${Math.max(10, win.innerWidth - pr.width - 10)}px`;
+    }
+    if (pr.left < 10) {
+      popup.style.left = '10px';
     }
     if (pr.bottom > win.innerHeight - 10) {
       popup.style.top = `${rect.top - pr.height - 4}px`;

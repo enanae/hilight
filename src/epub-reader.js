@@ -7,10 +7,31 @@
  * for DOM events inside the iframe and re-emits them on the rendition.
  */
 import ePub from 'epubjs';
-import { highlightContainer, handleWordTap, showWordDefinition, popupActive } from './highlighter.js';
+import { highlightContainer, handleWordTap, showWordDefinition, popupActive, resetPopupState } from './highlighter.js';
 
 let currentBook = null;
 let currentRendition = null;
+let currentLanguage = null;
+let currentOnStatsUpdate = null;
+
+/** Clean up the current book and rendition. */
+export function destroyEpub() {
+  resetPopupState();
+  if (currentRendition) {
+    // Remove all event emitter listeners we registered
+    currentRendition.off('touchstart');
+    currentRendition.off('touchmove');
+    currentRendition.off('touchend');
+    currentRendition.off('click');
+    currentRendition.off('dblclick');
+    currentRendition.destroy();
+    currentRendition = null;
+  }
+  if (currentBook) {
+    currentBook.destroy();
+    currentBook = null;
+  }
+}
 
 /**
  * Load and display an epub file.
@@ -21,14 +42,7 @@ let currentRendition = null;
  */
 export async function loadEpub(source, viewerEl, language, options = {}) {
   // Clean up previous book
-  if (currentRendition) {
-    currentRendition.destroy();
-    currentRendition = null;
-  }
-  if (currentBook) {
-    currentBook.destroy();
-    currentBook = null;
-  }
+  destroyEpub();
 
   viewerEl.innerHTML = '';
 
@@ -58,10 +72,16 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
   });
 
   currentRendition = rendition;
+  currentLanguage = language;
+  currentOnStatsUpdate = options.onStatsUpdate || null;
 
-  // After each section renders, highlight words and fix iframe for touch
+  // After each section renders, highlight words and fix iframe for touch.
+  // Uses currentLanguage (mutable) so language changes take effect immediately.
   rendition.hooks.content.register(async (contents) => {
     const doc = contents.document;
+
+    // If a popup was showing in the old section, reset the flag
+    resetPopupState();
 
     injectStyles(doc);
 
@@ -69,20 +89,13 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     const iframe = viewerEl.querySelector('iframe');
     if (iframe) {
       iframe.style.touchAction = 'manipulation';
-      iframe.removeAttribute('scrolling');
     }
 
-    await highlightContainer(doc.body, language, { onStatsUpdate: options.onStatsUpdate });
-
-    if (options.onChapterChange) {
-      options.onChapterChange(rendition.currentLocation());
-    }
+    await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
   });
 
   // Word tap handling via epubjs's event passthrough system.
-  // epubjs listens for DOM events inside the iframe and re-emits them
-  // on the rendition — this works reliably across iframe boundaries.
-  setupWordTapHandler(rendition, options.onStatsUpdate);
+  setupWordTapHandler(rendition, currentOnStatsUpdate);
 
   await rendition.display();
 
@@ -102,10 +115,10 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 function setupWordTapHandler(rendition, onStatsUpdate) {
   let touchStartX = 0;
   let touchStartY = 0;
-  let touchStartTime = 0;
   let longPressTimer = null;
   let longPressFired = false;
   let lastActionTime = 0;
+  let hadTouchRecently = false; // suppress synthetic click after touch
   const TAP_THRESHOLD = 10;
   const LONG_PRESS_MS = 500;
   const DEBOUNCE_MS = 300;
@@ -117,8 +130,8 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     const t = e.touches[0];
     touchStartX = t.clientX;
     touchStartY = t.clientY;
-    touchStartTime = Date.now();
     longPressFired = false;
+    hadTouchRecently = true;
 
     // Start long-press timer
     const span = findWordSpan(e.target);
@@ -163,8 +176,14 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     }
   });
 
-  // Desktop: click cycles state, dblclick shows definition
+  // Desktop only: click cycles state, dblclick shows definition.
+  // On touch devices the browser fires a synthetic click after touchend —
+  // skip it by checking hadTouchRecently.
   rendition.on('click', (e) => {
+    if (hadTouchRecently) {
+      hadTouchRecently = false;
+      return;
+    }
     if (popupActive) return;
     const span = findWordSpan(e.target);
     if (!span) return;
@@ -194,14 +213,42 @@ function findWordSpan(target) {
   return el?.closest?.('.hl-word') || null;
 }
 
-/** Navigate to next page/section. */
+/**
+ * Navigate to the next "page" of content.
+ * In scrolled-doc mode, rendition.next() jumps whole sections. Instead,
+ * scroll the container by one viewport height and only advance to the
+ * next section when scrolled to the bottom.
+ */
 export function nextPage() {
-  if (currentRendition) return currentRendition.next();
+  if (!currentRendition) return;
+  const container = getScrollContainer();
+  if (container) {
+    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 2;
+    if (!atBottom) {
+      container.scrollBy({ top: container.clientHeight - 40, behavior: 'smooth' });
+      return;
+    }
+  }
+  return currentRendition.next();
 }
 
-/** Navigate to previous page/section. */
+/** Navigate to previous page/section. Scrolls up first, then prev section. */
 export function prevPage() {
-  if (currentRendition) return currentRendition.prev();
+  if (!currentRendition) return;
+  const container = getScrollContainer();
+  if (container) {
+    if (container.scrollTop > 2) {
+      container.scrollBy({ top: -(container.clientHeight - 40), behavior: 'smooth' });
+      return;
+    }
+  }
+  return currentRendition.prev();
+}
+
+/** Find the epubjs scrollable container div. */
+function getScrollContainer() {
+  if (!currentRendition?.manager?.container) return null;
+  return currentRendition.manager.container;
 }
 
 /** Get table of contents. */
@@ -211,9 +258,75 @@ export async function getToc() {
   return nav.toc || [];
 }
 
-/** Navigate to a specific TOC item. */
+/**
+ * Navigate to a specific TOC item.
+ * epub.js's spine.get() often fails because TOC hrefs have different path
+ * prefixes than spine hrefs (e.g. "OEBPS/Text/ch1.xhtml" vs "Text/ch1.xhtml").
+ * We try multiple strategies to resolve the href.
+ */
 export function goToHref(href) {
-  if (currentRendition) return currentRendition.display(href);
+  if (!currentRendition || !currentBook) return;
+
+  // Strategy 1: try the href as-is (may work for well-formed epubs)
+  const hrefBase = href.split('#')[0];
+  const fragment = href.includes('#') ? '#' + href.split('#')[1] : '';
+  const spine = currentBook.spine;
+
+  // Direct lookup
+  let section = spine.get(hrefBase);
+
+  // Strategy 2: try basename match (strip path prefixes)
+  if (!section) {
+    const basename = hrefBase.split('/').pop();
+    section = spine.items.find(item => {
+      const itemBasename = (item.href || '').split('/').pop();
+      return itemBasename === basename;
+    });
+  }
+
+  // Strategy 3: try URL-decoded match
+  if (!section) {
+    try {
+      const decoded = decodeURIComponent(hrefBase);
+      section = spine.get(decoded);
+    } catch { /* ignore */ }
+  }
+
+  // Strategy 4: partial suffix match
+  if (!section) {
+    section = spine.items.find(item =>
+      item.href && (item.href.endsWith(hrefBase) || hrefBase.endsWith(item.href))
+    );
+  }
+
+  if (section) {
+    return currentRendition.display(section.href + fragment);
+  }
+  // Last resort: pass through and let epub.js try
+  return currentRendition.display(href);
+}
+
+/**
+ * Update the active language and re-highlight the current content.
+ * Called when user changes the language selector while a book is open.
+ */
+export async function setLanguage(language) {
+  currentLanguage = language;
+  const doc = getIframeDocument();
+  if (doc && doc.body) {
+    await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
+  }
+}
+
+/** Get the active iframe document (for querying highlighted words). */
+export function getIframeDocument() {
+  if (!currentRendition?.manager) return null;
+  const views = currentRendition.manager.views;
+  if (views && views._views && views._views.length > 0) {
+    const view = views._views[views._views.length - 1];
+    return view?.document || null;
+  }
+  return null;
 }
 
 /** Inject highlight CSS into the epub's iframe document. */
@@ -227,9 +340,14 @@ function injectStyles(doc) {
       -webkit-tap-highlight-color: rgba(168, 85, 247, 0.2);
       -webkit-user-select: none;
       user-select: none;
+      /* Prevent iframe body from creating a competing scroll context —
+         the epubjs container div handles scrolling in scrolled-doc mode. */
+      overflow: hidden !important;
     }
-    /* Force all text to light color on dark background */
-    * {
+    /* Force all text to light color on dark background.
+       Scoped to common text elements to avoid clobbering SVGs / code blocks. */
+    p, span, div, li, td, th, dt, dd, blockquote, figcaption,
+    h1, h2, h3, h4, h5, h6 {
       color: inherit !important;
     }
     a, a:link, a:visited, a:active {
