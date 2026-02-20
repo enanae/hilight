@@ -152,9 +152,10 @@ async function showDefinition(anchor, language, word) {
 
   positionPopup(popup, anchor, doc);
 
-  // Any interaction dismisses the popup and nothing else.
-  // We stopPropagation + preventDefault so the event doesn't
-  // also cycle a word or trigger page navigation.
+  // Any NEW interaction dismisses the popup and nothing else.
+  // We use touchstart (not touchend) so that lifting the finger
+  // from the long-press gesture that opened the popup doesn't
+  // immediately dismiss it — only a new tap does.
   const dismiss = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -162,12 +163,13 @@ async function showDefinition(anchor, language, word) {
     popup.remove();
     popupActive = false;
     doc.removeEventListener('click', dismiss, true);
-    doc.removeEventListener('touchend', dismiss, true);
+    doc.removeEventListener('touchstart', dismiss, true);
   };
-  // Use capture phase so we intercept before anything else sees the event
+  // Use capture phase so we intercept before anything else sees the event.
+  // Small delay ensures the current event cycle completes first.
   setTimeout(() => {
     doc.addEventListener('click', dismiss, true);
-    doc.addEventListener('touchend', dismiss, true);
+    doc.addEventListener('touchstart', dismiss, true);
   }, 50);
 }
 
