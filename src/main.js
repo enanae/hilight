@@ -3,6 +3,7 @@ import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, dest
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
 import { popupActive, markAllKnown } from './highlighter.js';
+import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, isOpen as isVocabOpen } from './vocab-browser.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -96,6 +97,7 @@ function renderApp() {
           <button id="btn-toc" class="toolbar-btn" title="Table of contents">&#9776; TOC</button>
           <span id="book-title" class="book-title"></span>
           <button id="btn-mark-known" class="toolbar-btn" title="Mark all words on this page as known">&#10003; All known</button>
+          <button id="btn-vocab" class="toolbar-btn" title="Browse vocabulary (V)">Aa</button>
           <button id="btn-close-book" class="toolbar-btn" title="Close book">&#10005;</button>
         </div>
         <div class="reader-nav">
@@ -216,6 +218,7 @@ function bindEvents() {
       case 'ArrowRight': nextPage(); break;
       case 'Escape':
         closeSettings();
+        closeVocabPanel();
         document.getElementById('toc-panel').classList.remove('open');
         break;
       case 't':
@@ -227,6 +230,12 @@ function bindEvents() {
         if (!e.ctrlKey && !e.metaKey) {
           const iframeDoc = getIframeDocument();
           if (iframeDoc) markAllKnown(iframeDoc).then(updateStats);
+        }
+        break;
+      case 'v':
+      case 'V':
+        if (!e.ctrlKey && !e.metaKey) {
+          toggleVocabPanel(currentLanguage, updateStats);
         }
         break;
       case 'w':
@@ -248,6 +257,11 @@ function bindEvents() {
       goToHref(a.dataset.href);
       document.getElementById('toc-panel').classList.remove('open');
     }
+  });
+
+  // Vocab browser
+  document.getElementById('btn-vocab').addEventListener('click', () => {
+    toggleVocabPanel(currentLanguage, updateStats);
   });
 
   // Mark all words on page as known
@@ -328,6 +342,7 @@ function renderTocItems(items, depth) {
 
 function closeBook() {
   destroyEpub();
+  closeVocabPanel();
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('toc-panel').classList.remove('open');
@@ -335,6 +350,7 @@ function closeBook() {
 }
 
 function toggleToc() {
+  closeVocabPanel();
   document.getElementById('toc-panel').classList.toggle('open');
 }
 

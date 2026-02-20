@@ -1,280 +1,370 @@
-# Hilight — Full Repo Audit & Restructure Plan
+# Vocabulary Browser — Implementation Plan
 
-## Executive Summary
+## Feature Summary
 
-The audit found **50+ issues** across 7 source files. Most are not isolated bugs — they stem
-from three architectural problems:
-
-1. **No event coordination layer** — touch, click, popup dismiss, and page navigation all
-   mutate shared state (`popupActive`, `lastActionTime`) with no central coordinator. Race
-   conditions are inevitable.
-2. **No lifecycle management** — epub.js resources (renditions, iframes, event listeners) are
-   never properly cleaned up. State flags like `popupActive` survive across chapter/book
-   transitions and get permanently stuck.
-3. **Tight coupling between rendering, events, and data** — highlighter.js owns popup DOM,
-   dismiss logic, AND the `popupActive` flag. epub-reader.js owns touch logic AND scroll/nav.
-   main.js owns UI AND settings AND stats. No module has a clean single responsibility.
-
-The plan below is ordered by **user-facing impact**, not by file. Each phase is independently
-shippable.
+A slide-in panel that lets users browse all saved vocabulary for the current language, optionally
+filtered to words that appear in the currently open book, with words grouped under shared stems.
 
 ---
 
-## Phase 1: Fix the broken interactions (critical UX bugs)
+## Architectural Decisions
 
-These are the bugs users hit every session. Fix them first.
+### Decision 1: Where do word-family groups come from?
 
-### 1A. Fix popup dismissed immediately by phantom `click` event
+**Problem**: Neither dictionary API returns structured stem/family data.
 
-**Bug**: On mobile, a long-press fires: touchstart → (hold) → touchend → **click**. The dismiss
-handler (`highlighter.js:171`) listens for `click` in capture phase. The synthetic `click` from
-lifting after the long press fires ~50ms after touchend and immediately dismisses the popup.
-This is why "long click doesn't work correctly after short click" — the popup flashes and vanishes.
+- **Wiktionary REST API** (`/page/definition/`) returns only `partOfSpeech` + `definitions`.
+  No etymology, derived terms, or related forms. The richer data (derived/related/synonyms)
+  lives in Wiktionary dump files (wiktextract format) but not the live REST API.
+- **Free Dictionary API** returns `synonyms`/`antonyms` arrays, but they're usually empty
+  and don't represent morphological families ("running" → "run").
+- **Wiktextract dumps** (kaikki.org) have full `derived`, `related`, `synonyms` fields, but
+  they're multi-GB offline files — not viable for a client-side web app.
 
-**Fix**: Track the creation timestamp. In the dismiss handler, ignore events within 400ms of
-popup creation (synthetic events from the originating gesture always arrive within ~300ms).
-Remove the fragile 50ms `setTimeout` and replace with timestamp gating.
+**Chosen approach: Client-side lightweight stemmer.**
 
-**Files**: `highlighter.js` lines 155–173
+A rule-based suffix-stripping stemmer for the 8 most common European languages
+(en, es, fr, de, it, pt, nl, sv), falling back to identity (no grouping) for CJK, Arabic,
+Thai, etc. where stemming is either inapplicable or requires full morphological analysis.
 
-### 1B. Fix `popupActive` stuck forever after chapter navigation
+Why this over alternatives:
+- Zero network requests, works offline
+- ~150 lines of code, no external dependency
+- Good enough for *grouping* (doesn't need to be linguistically perfect — "runs", "running",
+  "runner" all reducing to "run" is sufficient even if "run" isn't the true lemma)
+- Graceful degradation: for unsupported languages, words simply aren't grouped
 
-**Bug**: If the user navigates (next/prev/TOC) while a popup is showing, the iframe is destroyed.
-The popup DOM and dismiss listeners vanish, but `popupActive` stays `true` forever. ALL
-interactions are suppressed — taps, keyboard nav, page buttons — until page reload.
+We explicitly do NOT use a heavy NLP library (snowball-stemmer, natural.js, etc.) — the
+bundle size tradeoff isn't justified for a grouping heuristic. If the stemmer produces a
+bad group, the consequence is just a slightly odd visual cluster, not data corruption.
 
-**Fix**: Reset `popupActive = false` in the epub-reader content hook (when a new chapter loads).
-Also wrap `showDefinition` in try/finally so `popupActive` is always cleaned up even if
-`lookupWord` throws.
+### Decision 2: How to get "words in this book"?
 
-**Files**: `highlighter.js` lines 120–173, `epub-reader.js` line 63
+**Problem**: epub.js loads sections on demand into an iframe. There's no API to get all words
+across all sections at once.
 
-### 1C. Fix touch+click double-firing cycling words twice
+**Chosen approach: Lazy full-spine scan, cached per book.**
 
-**Bug**: On mobile, a short tap fires both `touchend` and then `click`. The 300ms debounce
-(`DEBOUNCE_MS`) sometimes fails because the `click` arrives right at the boundary. The word
-cycles twice in one tap (unknown → learning → known).
+When the user first toggles the "In this book" filter:
+1. Iterate `book.spine.items`
+2. For each section, call `section.load(book.load.bind(book))` to get a Document
+3. Walk text nodes, tokenize, collect normalized words into a `Set<string>`
+4. Cache the Set in memory (keyed by book URL/identifier)
 
-**Fix**: Set `lastActionTime` in both handlers, AND add a flag that suppresses `click` events
-after any `touchend` was processed for the same gesture. Or: don't register the `click` handler
-on touch-capable devices at all (use it only for mouse input).
+This is an async operation (~1–5s for a 300-page book). Show a progress bar during the scan.
+After the first scan, filtering is instant.
 
-**Files**: `epub-reader.js` lines 145–176
+Why not scan at book-open time:
+- Delays initial render for no benefit (most users won't immediately open the vocab browser)
+- Wastes work if the user never uses the filter
 
-### 1D. Fix `stat-unknown` always showing 0
+Why not only check the current section:
+- "Words in this book" means the whole book, not the current page
+- Users expect the filter to reflect the full text
 
-**Bug**: `main.js:263` does `document.querySelectorAll('.hl-word.hl-unknown')` on the parent
-document, but highlighted words live inside the epub iframe. Query always returns 0.
+### Decision 3: Panel vs Modal?
 
-**Fix**: After highlighting, emit the unknown-on-page count from the content hook inside the
-iframe, or query the iframe document directly via `currentRendition`.
+**Chosen: Right-side slide-in panel** (mirrors the TOC panel on the left).
 
-**Files**: `main.js` lines 260–267, `epub-reader.js` content hook
+- A modal blocks the reader — users may want to see context while browsing vocab
+- A slide-in panel allows glancing at the book text alongside the word list
+- On mobile (<600px), the panel goes full-width (same as TOC)
+- Panel and TOC are mutually exclusive (opening one closes the other)
 
----
+### Decision 4: Virtual scrolling?
 
-## Phase 2: Fix navigation & scrolling (the biggest UX complaints)
+**Chosen: No.** Use native DOM + CSS `overflow-y: auto`.
 
-### 2A. Fix TOC navigation skipping chapters
+A vocabulary of 5,000 unique words produces ~5,000 DOM nodes. Modern browsers handle this
+fine. Virtual scrolling adds significant complexity (intersection observers, dynamic heights
+for groups, keyboard accessibility) for marginal performance gain. If a user somehow has
+50,000+ words, the grouped/collapsed view keeps the visible DOM small anyway.
 
-**Bug**: `goToHref()` passes the TOC href directly to `rendition.display()`. epub.js's
-`spine.get()` looks up the href in `spineByHref`, but TOC hrefs and spine hrefs often have
-different path prefixes (e.g., `OEBPS/Text/chapter1.xhtml` vs `Text/chapter1.xhtml`). When
-they don't match, navigation silently fails — the promise rejects but is never caught. Some
-chapters match by coincidence, creating the "intro → chapter 4" skip.
+### Decision 5: Word grouping display
 
-**Fix**: Before calling `display()`, resolve the TOC href against the book's spine. Try
-multiple lookup strategies: exact match, basename match, URI-decoded match. Log a warning if
-no section is found. Await the promise and handle errors.
+**Chosen: Collapsible stem groups, sorted by group size (largest first).**
 
-**Files**: `epub-reader.js` line 216, `main.js` lines 240–247
+```
+▼ run (4 words)
+   run ······ ✓ known
+   running ·· ~ learning
+   runner ···· ? unknown
+   runs ······ ✓ known
 
-### 2B. Fix nested scrolling between iframe and container
+▶ walk (2 words)         ← collapsed by default if > 20 groups visible
+```
 
-**Bug**: `flow: 'scrolled-doc'` creates a scrollable container inside `.epub-viewer`. The
-iframe inside it may also scroll. Plus `iframe.removeAttribute('scrolling')` (line 72)
-re-enables iframe scrolling that epub.js intentionally disabled. This creates two competing
-scroll contexts.
+- The stem itself is the group header (may not be a real word — that's fine for grouping)
+- Each word shows its current level with a colored badge
+- Tapping a word opens inline options: cycle level, look up definition
+- Single-word "groups" are shown flat (no collapsible header)
 
-**Fix**: Remove `iframe.removeAttribute('scrolling')`. Ensure the epub.js container is the
-only scrollable element. Set explicit `overflow: hidden` on the iframe body via injected CSS
-so only the outer epub.js container scrolls.
+### Decision 6: Filter controls
 
-**Files**: `epub-reader.js` lines 69–73, injected CSS at line 220
+Three filter axes, all combinable:
 
-### 2C. Fix `next()`/`prev()` jumping entire sections instead of scrolling
+1. **Level filter**: All / Unknown / Learning / Known (radio buttons or segmented control)
+2. **In-book filter**: toggle switch — "Only words in this book" (disabled when no book open)
+3. **Search**: text input for quick find within the list
 
-**Bug**: In `scrolled-doc` mode, `rendition.next()` jumps to the next spine section, not the
-next screen of content. Long chapters have no page-level navigation — the user must scroll
-manually. But the prev/next buttons and arrow keys call `next()`/`prev()`, skipping entire
-chapters.
-
-**Fix**: In `scrolled-doc` mode, make `nextPage()` scroll the container by one viewport height
-instead of calling `rendition.next()`. Only advance to the next section when scrolled to the
-bottom. (Alternatively, switch from `scrolled-doc` to `paginated` flow, which gives proper
-page-level prev/next but requires different CSS.)
-
-**Files**: `epub-reader.js` lines 198–205
-
-### 2D. Fix `100vh` cut off by mobile browser chrome
-
-**Bug**: `#app { height: 100vh }` includes the area behind the mobile browser's URL bar.
-Bottom content (nav buttons) is hidden.
-
-**Fix**: Use `height: 100dvh` with `100vh` fallback. Add `min-height: 0` to `.reader-nav`
-for proper flex shrinking.
-
-**Files**: `style.css` lines 38, 284–288
+The level filter defaults to "All". The in-book filter defaults to off.
 
 ---
 
-## Phase 3: Fix lifecycle & resource management
+## Module Design
 
-### 3A. Add proper book close cleanup
+### New files
 
-**Bug**: `closeBook()` toggles CSS classes but doesn't destroy the rendition. The iframe,
-event listeners, resize observers, and content hooks all persist. Opening multiple books
-accumulates leaked resources.
+| File | Responsibility |
+|------|----------------|
+| `src/stemmer.js` | Lightweight multi-language stemmer (pure function, no deps) |
+| `src/vocab-browser.js` | Panel UI: renders word list, handles filters, manages panel state |
 
-**Fix**: Call `currentRendition.destroy()` and `currentBook.destroy()` in `closeBook()`. Clear
-`currentRendition` and `currentBook`. Also add a cleanup function that removes stale event
-handlers.
+### Modified files
 
-**Files**: `main.js` lines 250–254, `epub-reader.js` (new `destroyEpub()` export)
+| File | Changes |
+|------|---------|
+| `src/epub-reader.js` | Export `getAllBookWords()` — scans full spine, returns `Set<string>` |
+| `src/main.js` | Add vocab browser button to toolbar, bind panel open/close, wire keyboard shortcut (`V`) |
+| `src/style.css` | Vocab panel styles (mirrors `.toc-panel` structure) |
+| `src/vocab-store.js` | Add `getAllWords(language)` — returns all entries (word + level) for a language |
 
-### 3B. Fix TOC click handler accumulation
+### Data flow
 
-**Bug**: Every `openBook()` call adds a new click listener to `#toc-list`. After N books,
-N handlers fire on each TOC click, calling `goToHref` with hrefs from previous books.
+```
+User clicks "Vocab" button
+  → vocab-browser.openPanel(language)
+    → vocabStore.getAllWords(language)     // all saved words + levels
+    → stemmer.stem(word, language)         // compute stem for each word
+    → group words by stem
+    → render grouped list
 
-**Fix**: Use event delegation with a single handler set up once in `bindEvents()`, or remove
-the old handler before adding a new one.
+User toggles "In this book"
+  → epub-reader.getAllBookWords()          // lazy scan, cached
+    → intersect saved words with book words
+    → re-render list
 
-**Files**: `main.js` lines 240–247
-
-### 3C. Fix language change not re-highlighting
-
-**Bug**: Changing the language while a book is open updates `currentLanguage` and stats, but
-the epub content keeps the old language's word spans. Tapping words saves to the old language.
-
-**Fix**: On language change, re-invoke `highlightContainer` on the current iframe document,
-or reload the current section.
-
-**Files**: `main.js` lines 174–178
-
-### 3D. Fix stale rendition event handlers after destroy
-
-**Bug**: epub.js's `destroy()` doesn't clean up event emitter listeners (the cleanup code is
-commented out in the library). Old handlers from `setupWordTapHandler` persist and fire
-alongside new ones.
-
-**Fix**: Track all rendition event handlers and explicitly remove them before destroying.
-Or use `rendition.removeAllListeners()` before destroy.
-
-**Files**: `epub-reader.js` lines 102–183
+User taps a word
+  → cycle level (same as reader tap)
+  → update DOM in-place (badge color)
+  → if reader is showing same word, update reader DOM too
+```
 
 ---
 
-## Phase 4: Harden the tokenizer & vocab store
+## Implementation Steps
 
-### 4A. Fix French/Italian contractions split by fallback tokenizer
+### Step 1: `stemmer.js` (~150 LOC)
 
-**Bug**: The regex fallback tokenizes `l'homme` as three tokens (`l`, `'`, `homme`). Users
-get meaningless fragments like `l` and `t` as vocabulary items. The `Intl.Segmenter` path
-handles this correctly but the fallback doesn't.
+```js
+export function stem(word, language) → string
+```
 
-**Fix**: Add apostrophe (both `'` U+0027 and `'` U+2019) to the word character class in the
-fallback regex. For CJK, add a comment noting that the fallback is inadequate without
-`Intl.Segmenter`.
+Language-specific suffix tables:
 
-**Files**: `tokenizer.js` lines 37–38
+- **English**: -ing, -ed, -s, -es, -er, -est, -ly, -tion, -sion, -ment, -ness, -ful, -less, -able, -ible
+- **Spanish**: -ando, -iendo, -ción, -mente, -ado, -ido, -ar, -er, -ir, -es, -os, -as
+- **French**: -ment, -tion, -ant, -ent, -er, -ez, -ons, -ais, -ait, -aient
+- **German**: -ung, -heit, -keit, -lich, -isch, -en, -er, -est, -te, -ten
+- **Italian**: -mente, -zione, -ando, -endo, -ato, -ito, -are, -ere, -ire
+- **Portuguese**: -ção, -mente, -ando, -endo, -ado, -ido
+- **Dutch**: -en, -er, -heid, -ing, -lijk, -isch
+- **Swedish**: -ning, -het, -lig, -isk, -ande, -ende, -ar, -er
 
-### 4B. Add Unicode NFC normalization
+Rules: strip longest matching suffix, but only if the remaining stem is ≥ 3 characters
+(prevents "going" → "go" → "" or "be" → ""). Apply at most one rule per word.
 
-**Bug**: The same character (e.g., `é`) can be NFC or NFD encoded. Different epub sources use
-different forms. A word stored as NFC won't match an NFD lookup — the user marks it known but
-it stays highlighted as unknown.
+For unlisted languages (ko, ja, zh, ar, ru, hi, th, vi, tr, pl): return the word unchanged.
+This means those languages get a flat alphabetical list with no grouping — honest about
+what we can't do rather than producing bad groups.
 
-**Fix**: Add `.normalize('NFC')` to `normalizeWord()`.
+### Step 2: `vocab-store.js` addition
 
-**Files**: `tokenizer.js` line 64
+```js
+/** Get all words + levels for a language. Returns [{word, level}, ...]. */
+export async function getAllWords(language) {
+  const store = await tx('readonly');
+  const idx = store.index('by_language');
+  const req = idx.getAll(language);
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result.map(r => ({ word: r.word, level: r.level })));
+    req.onerror = () => reject(req.error);
+  });
+}
+```
 
-### 4C. Fix Turkish İ/I casing
+### Step 3: `epub-reader.js` — `getAllBookWords()`
 
-**Bug**: `toLowerCase()` without locale breaks Turkish. `I` → `i` (wrong, should be `ı`).
+```js
+let cachedBookWords = null;
+let cachedBookId = null;
 
-**Fix**: Accept locale in `normalizeWord()` and use `toLocaleLowerCase(locale)`.
+export async function getAllBookWords(onProgress) {
+  if (!currentBook) return null;
+  const bookId = currentBook.key(); // unique book identifier
+  if (cachedBookId === bookId && cachedBookWords) return cachedBookWords;
 
-**Files**: `tokenizer.js` line 64, `highlighter.js` lines 46, 65 (pass locale through)
+  const words = new Set();
+  const items = currentBook.spine.items;
+  for (let i = 0; i < items.length; i++) {
+    const section = currentBook.spine.get(items[i].index);
+    const doc = await section.load(currentBook.load.bind(currentBook));
+    // Walk text nodes
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const segs = tokenize(walker.currentNode.textContent, langToLocale(currentLanguage));
+      for (const seg of segs) {
+        if (seg.isWord) words.add(normalizeWord(seg.text, langToLocale(currentLanguage)));
+      }
+    }
+    section.unload();
+    if (onProgress) onProgress((i + 1) / items.length);
+  }
 
-### 4D. Fix IndexedDB rejected promise cached forever
+  cachedBookWords = words;
+  cachedBookId = bookId;
+  return words;
+}
+```
 
-**Bug**: If `openDB()` fails (permission denied, quota, Safari private browsing), the rejected
-promise is cached. Every subsequent operation fails until page reload.
+### Step 4: `vocab-browser.js` (~250 LOC)
 
-**Fix**: On rejection, set `dbPromise = null` so the next call retries.
+**Panel structure:**
 
-**Files**: `vocab-store.js` lines 15–31
+```html
+<div class="vocab-panel">
+  <div class="vocab-header">
+    <h3>Vocabulary</h3>
+    <button class="close-btn">✕</button>
+  </div>
+  <div class="vocab-filters">
+    <input type="search" placeholder="Search words..." />
+    <div class="vocab-level-filter">
+      <button class="active">All</button>
+      <button>?</button>     <!-- unknown -->
+      <button>~</button>     <!-- learning -->
+      <button>✓</button>     <!-- known -->
+    </div>
+    <label class="vocab-book-filter">
+      <input type="checkbox" /> In this book
+      <span class="scan-progress"></span>   <!-- shows during spine scan -->
+    </label>
+  </div>
+  <div class="vocab-list">
+    <!-- rendered groups -->
+  </div>
+  <div class="vocab-summary">
+    42 words shown · 3 groups
+  </div>
+</div>
+```
 
-### 4E. Add import validation
+**Core rendering logic:**
 
-**Bug**: `importVocab` blindly `put()`s whatever JSON is provided. Malformed entries corrupt
-the database. Invalid levels cause `LEVEL_CLASSES[level]` to be `undefined`.
+```js
+function renderList(words, bookWords, searchQuery, levelFilter) {
+  // 1. Filter by level
+  let filtered = levelFilter === 'all' ? words : words.filter(w => w.level === levelFilter);
 
-**Fix**: Validate each entry has `language` (string), `word` (string), `level` (0, 1, or 2).
-Skip invalid entries with a warning count.
+  // 2. Filter by book presence
+  if (bookWords) filtered = filtered.filter(w => bookWords.has(w.word));
 
-**Files**: `vocab-store.js` lines 127–136
+  // 3. Filter by search
+  if (searchQuery) filtered = filtered.filter(w => w.word.includes(searchQuery));
+
+  // 4. Group by stem
+  const groups = new Map();
+  for (const w of filtered) {
+    const s = stem(w.word, currentLanguage);
+    if (!groups.has(s)) groups.set(s, []);
+    groups.get(s).push(w);
+  }
+
+  // 5. Sort groups by size (largest first), words within group alphabetically
+  const sorted = [...groups.entries()]
+    .sort((a, b) => b[1].length - a[1].length);
+
+  // 6. Render
+  ...
+}
+```
+
+**Word interaction in the panel:**
+
+- Click a word → cycle its level (same as in-reader tap)
+- The in-reader spans update too (query by `data-word` in iframe doc)
+- Long-press / right-click → show definition popup (reuse existing `showWordDefinition`)
+
+### Step 5: `main.js` integration
+
+- Add `📚` button to reader toolbar (between "✓ All known" and "✕")
+- `V` keyboard shortcut to toggle the vocab panel
+- Opening vocab panel closes TOC panel (and vice versa)
+- Panel reads `currentLanguage` from main.js state
+
+### Step 6: `style.css` — vocab panel styles
+
+Mirror `.toc-panel` but on the right side. Key additions:
+
+```css
+.vocab-panel {
+  position: absolute;
+  top: 0;
+  right: 0;               /* right side, mirroring TOC on left */
+  width: 340px;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+}
+
+.vocab-panel.open { display: flex; }
+
+/* Mobile: full width */
+@media (max-width: 600px) {
+  .vocab-panel { width: 100%; }
+}
+
+.vocab-group-header {
+  /* collapsible, shows stem + word count */
+}
+
+.vocab-word-row {
+  /* word text + level badge, min-height 40px for touch */
+}
+
+.vocab-level-badge {
+  /* colored dot matching hl-unknown/partial/known colors */
+}
+
+.vocab-scan-bar {
+  /* thin progress bar during book scan */
+}
+```
 
 ---
 
-## Phase 5: Polish & accessibility
+## Edge Cases & Mitigations
 
-### 5A. Add Escape key to close modals, suppress arrow keys in inputs
-
-**Fix**: Add `keydown` handler for Escape → close settings modal / close TOC. Check
-`e.target.tagName` before handling arrow keys to avoid navigating while typing.
-
-**Files**: `main.js` lines 189–193
-
-### 5B. Increase touch target sizes
-
-**Fix**: Icon buttons to 44px min, toolbar buttons to `min-height: 44px`.
-
-**Files**: `style.css` lines 94–107, 256–264
-
-### 5C. Fix popup positioning on narrow viewports
-
-**Bug**: The left-position correction can go negative on narrow screens, pushing the popup
-off-screen.
-
-**Fix**: Clamp left to `Math.max(10, ...)`.
-
-**Files**: `highlighter.js` lines 183–191
-
-### 5D. Render nested TOC items
-
-**Bug**: Only top-level TOC items are rendered. Sub-chapters are invisible.
-
-**Fix**: Recursively render `item.subitems` with indentation.
-
-**Files**: `main.js` lines 237–239
-
-### 5E. Add Firefox scrollbar styling
-
-**Fix**: Add `scrollbar-width: thin; scrollbar-color: var(--border) var(--bg)` alongside
-the webkit rules.
-
-**Files**: `style.css` lines 509–525
+| Edge case | Mitigation |
+|-----------|------------|
+| User has 0 saved words | Show empty state: "No vocabulary saved yet. Tap words while reading to start building your list." |
+| Book scan fails mid-way (corrupt section) | try-catch per section, skip failures, still return partial set |
+| Stemmer produces a 1-char stem | Floor stem length at 3 chars; if strip would go below, don't strip |
+| Two unrelated words share a stem | Acceptable — the grouping is a convenience, not a linguistic claim. Users see the actual words inside each group. |
+| User changes language while panel is open | Re-fetch words for the new language, re-render. Clear book word cache (different tokenization). |
+| Panel open + chapter navigation | Stats update in panel too (word levels might change). Listen for the same `onStatsUpdate` callback. |
 
 ---
 
-## Implementation Order
+## What This Plan Does NOT Do
 
-| Priority | Phase | Items | Effort | User Impact |
-|----------|-------|-------|--------|-------------|
-| **P0** | 1 | 1A, 1B, 1C, 1D | ~2hr | Fixes broken core interactions |
-| **P0** | 2 | 2A, 2B, 2C, 2D | ~3hr | Fixes scrolling and navigation |
-| **P1** | 3 | 3A, 3B, 3C, 3D | ~2hr | Prevents state corruption over time |
-| **P1** | 4 | 4A–4E | ~2hr | Fixes data integrity for non-English |
-| **P2** | 5 | 5A–5E | ~1hr | Polish and accessibility |
+- **No server-side lemmatization**: Would give better grouping but requires a backend
+- **No Wiktextract integration**: The dump data is comprehensive but multi-GB, not suitable for client-side
+- **No spaced-repetition**: The vocab browser is read-only browsing, not a flashcard system
+- **No export-from-panel**: Use the existing export button (exports all vocab for the language)
+
+These are natural follow-ups but each is a separate feature with its own architectural decisions.

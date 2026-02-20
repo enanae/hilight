@@ -115,6 +115,17 @@ export async function getStats(language) {
   });
 }
 
+/** Get all words + levels for a language. Returns [{word, level}, ...]. */
+export async function getAllWords(language) {
+  const store = await tx('readonly');
+  return new Promise((resolve, reject) => {
+    const idx = store.index('by_language');
+    const req = idx.getAll(language);
+    req.onsuccess = () => resolve(req.result.map(r => ({ word: r.word, level: r.level })));
+    req.onerror = () => reject(req.error);
+  });
+}
+
 /** Export all vocab for a language as JSON array. */
 export async function exportVocab(language) {
   const store = await tx('readonly');

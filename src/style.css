@@ -546,6 +546,282 @@ html, body {
   color: var(--accent);
 }
 
+/* === Vocab Browser Panel === */
+.vocab-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+}
+
+.vocab-panel.open {
+  display: flex;
+}
+
+.vocab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.vocab-filters {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vocab-search {
+  padding: 6px 10px !important;
+  margin-top: 0 !important;
+  font-size: 13px !important;
+}
+
+.vocab-level-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.vocab-lvl-btn {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.vocab-lvl-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.vocab-lvl-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.vocab-lvl-btn.vb-unknown { color: var(--unknown); }
+.vocab-lvl-btn.vb-partial { color: var(--partial); }
+.vocab-lvl-btn.vb-known { color: var(--known); }
+.vocab-lvl-btn.vb-unknown.active { background: var(--unknown-bg); border-color: var(--unknown); }
+.vocab-lvl-btn.vb-partial.active { background: var(--partial-bg); border-color: var(--partial); }
+.vocab-lvl-btn.vb-known.active { background: var(--known-bg); border-color: var(--known); }
+
+.vocab-book-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.vocab-book-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.vocab-scan-status {
+  font-size: 12px;
+  color: var(--accent);
+  margin-left: auto;
+}
+
+.vocab-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.vocab-summary {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Empty state */
+.vb-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* --- Group --- */
+.vb-group {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.vb-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.vb-group-header:hover {
+  background: var(--accent-dim);
+}
+
+.vb-group-chevron {
+  width: 14px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.vb-group-chevron::before {
+  content: '\25BC'; /* ▼ */
+  color: var(--text-muted);
+}
+
+.vb-group.collapsed .vb-group-chevron::before {
+  content: '\25B6'; /* ▶ */
+}
+
+.vb-group-stem {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.vb-group-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.vb-group-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.vb-group-mark {
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.vb-group-mark.vb-partial {
+  color: var(--partial);
+}
+
+.vb-group-mark.vb-known {
+  color: var(--known);
+}
+
+.vb-group-mark:hover {
+  transform: scale(1.1);
+}
+
+.vb-group-mark.vb-partial:hover {
+  background: var(--partial-bg);
+  border-color: var(--partial);
+}
+
+.vb-group-mark.vb-known:hover {
+  background: var(--known-bg);
+  border-color: var(--known);
+}
+
+.vb-group-body {
+  padding-left: 20px;
+}
+
+.vb-group.collapsed .vb-group-body {
+  display: none;
+}
+
+/* --- Word row --- */
+.vb-word-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  min-height: 34px;
+}
+
+.vb-word-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.vb-flat-row {
+  padding: 5px 12px 5px 32px;
+}
+
+.vb-word-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.vb-badge {
+  width: 24px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.vb-badge.vb-unknown {
+  background: var(--unknown-bg);
+  color: var(--unknown);
+}
+
+.vb-badge.vb-partial {
+  background: var(--partial-bg);
+  color: var(--partial);
+}
+
+.vb-badge.vb-known {
+  background: var(--known-bg);
+  color: var(--known);
+}
+
 /* === Loading Overlay === */
 .hl-loading-overlay {
   position: absolute;
@@ -665,6 +941,10 @@ html, body {
   }
 
   .toc-panel {
+    width: 100%;
+  }
+
+  .vocab-panel {
     width: 100%;
   }
 
