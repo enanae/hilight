@@ -2,6 +2,7 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary } from './dictionary.js';
+import { popupActive } from './highlighter.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -170,12 +171,17 @@ function bindEvents() {
     updateStats();
   });
 
-  // Navigation
-  document.getElementById('btn-prev').addEventListener('click', () => prevPage());
-  document.getElementById('btn-next').addEventListener('click', () => nextPage());
+  // Navigation — suppressed while definition popup is showing
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    if (!popupActive) prevPage();
+  });
+  document.getElementById('btn-next').addEventListener('click', () => {
+    if (!popupActive) nextPage();
+  });
 
-  // Keyboard nav
+  // Keyboard nav — suppressed while definition popup is showing
   document.addEventListener('keydown', (e) => {
+    if (popupActive) return;
     if (e.key === 'ArrowLeft') prevPage();
     if (e.key === 'ArrowRight') nextPage();
   });

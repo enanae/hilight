@@ -7,7 +7,7 @@
  * for DOM events inside the iframe and re-emits them on the rendition.
  */
 import ePub from 'epubjs';
-import { highlightContainer, handleWordTap, showWordDefinition } from './highlighter.js';
+import { highlightContainer, handleWordTap, showWordDefinition, popupActive } from './highlighter.js';
 
 let currentBook = null;
 let currentRendition = null;
@@ -111,6 +111,8 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   const DEBOUNCE_MS = 300;
 
   rendition.on('touchstart', (e) => {
+    // Don't start new interactions while popup is showing
+    if (popupActive) return;
     if (!e.touches || !e.touches[0]) return;
     const t = e.touches[0];
     touchStartX = t.clientX;
@@ -142,9 +144,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
 
   rendition.on('touchend', (e) => {
     clearTimeout(longPressTimer);
-
-    // If long press already fired, don't also cycle state
-    if (longPressFired) return;
+    if (popupActive || longPressFired) return;
 
     if (!e.changedTouches || !e.changedTouches[0]) return;
     const span = findWordSpan(e.target);
@@ -165,6 +165,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
 
   // Desktop: click cycles state, dblclick shows definition
   rendition.on('click', (e) => {
+    if (popupActive) return;
     const span = findWordSpan(e.target);
     if (!span) return;
 
@@ -175,6 +176,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   });
 
   rendition.on('dblclick', (e) => {
+    if (popupActive) return;
     const span = findWordSpan(e.target);
     if (!span) return;
     showWordDefinition(span);

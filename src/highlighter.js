@@ -16,6 +16,9 @@ export const LEVEL_KNOWN = 2;
 
 const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
 
+/** True when a definition popup is visible — all other interactions should be suppressed. */
+export let popupActive = false;
+
 /**
  * Highlight all words in a container element.
  * Walks the DOM, finds text nodes, replaces them with word spans.
@@ -124,6 +127,8 @@ async function showDefinition(anchor, language, word) {
   popup.className = 'hl-popup';
   popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
 
+  popupActive = true;
+
   doc.body.appendChild(popup);
   positionPopup(popup, anchor, doc);
 
@@ -147,17 +152,22 @@ async function showDefinition(anchor, language, word) {
 
   positionPopup(popup, anchor, doc);
 
-  // Close on any outside interaction
-  const close = (e) => {
-    if (!popup.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
-      popup.remove();
-      doc.removeEventListener('click', close);
-      doc.removeEventListener('touchend', close);
-    }
+  // Any interaction dismisses the popup and nothing else.
+  // We stopPropagation + preventDefault so the event doesn't
+  // also cycle a word or trigger page navigation.
+  const dismiss = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    popup.remove();
+    popupActive = false;
+    doc.removeEventListener('click', dismiss, true);
+    doc.removeEventListener('touchend', dismiss, true);
   };
+  // Use capture phase so we intercept before anything else sees the event
   setTimeout(() => {
-    doc.addEventListener('click', close);
-    doc.addEventListener('touchend', close);
+    doc.addEventListener('click', dismiss, true);
+    doc.addEventListener('touchend', dismiss, true);
   }, 50);
 }
 
