@@ -31,11 +31,14 @@ function tokenizeWithSegmenter(text, locale) {
 /**
  * Regex fallback: splits on word boundaries.
  * Handles Latin, Cyrillic, Greek, Arabic, Hebrew, Hangul, CJK, Thai, Devanagari, etc.
+ * Includes apostrophes (' and \u2019) within words so French/Italian contractions
+ * like "l'homme" and "dell'arte" are kept as single tokens.
  */
 function tokenizeFallback(text) {
-  // Match word-like sequences across many scripts, or single non-word chars / whitespace
+  // Word = letters/marks/numbers, optionally containing internal apostrophes
+  // followed by more letters (e.g. l'homme, don't, dell'arte).
   const pattern =
-    /([\p{L}\p{M}\p{N}]+)|(\s+)|([^\p{L}\p{M}\p{N}\s])/gu;
+    /([\p{L}\p{M}\p{N}]+(?:['\u2019][\p{L}\p{M}\p{N}]+)*)|(\s+)|([^\p{L}\p{M}\p{N}\s])/gu;
 
   const segments = [];
   let lastIndex = 0;
@@ -57,9 +60,13 @@ function tokenizeFallback(text) {
 }
 
 /**
- * Normalize a word for storage: lowercase, trim.
- * For CJK/Hangul, no lowercasing is needed but we still trim.
+ * Normalize a word for storage: NFC normalize, locale-aware lowercase, trim.
+ * NFC normalization ensures that e.g. é (composed) matches é (decomposed).
+ * Locale-aware lowercase handles Turkish İ→i correctly.
  */
-export function normalizeWord(word) {
-  return word.toLowerCase().trim();
+export function normalizeWord(word, locale) {
+  const normalized = word.normalize('NFC');
+  return locale
+    ? normalized.toLocaleLowerCase(locale).trim()
+    : normalized.toLowerCase().trim();
 }

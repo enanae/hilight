@@ -1,5 +1,5 @@
 import './style.css';
-import { loadEpub, nextPage, prevPage, getToc, goToHref } from './epub-reader.js';
+import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
 import { popupActive } from './highlighter.js';
@@ -170,10 +170,11 @@ function bindEvents() {
     fileInput.value = '';
   });
 
-  // Language select
-  document.getElementById('lang-select').addEventListener('change', (e) => {
+  // Language select — re-highlights the current section with the new language
+  document.getElementById('lang-select').addEventListener('change', async (e) => {
     currentLanguage = e.target.value;
     localStorage.setItem('hilight-lang', currentLanguage);
+    await setLanguage(currentLanguage);
     updateStats();
   });
 
@@ -185,16 +186,30 @@ function bindEvents() {
     if (!popupActive) nextPage();
   });
 
-  // Keyboard nav — suppressed while definition popup is showing
+  // Keyboard nav — suppressed while popup showing or typing in inputs
   document.addEventListener('keydown', (e) => {
     if (popupActive) return;
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     if (e.key === 'ArrowLeft') prevPage();
     if (e.key === 'ArrowRight') nextPage();
+    if (e.key === 'Escape') {
+      closeSettings();
+      document.getElementById('toc-panel').classList.remove('open');
+    }
   });
 
-  // TOC
+  // TOC — single delegated handler so it doesn't accumulate on repeated book loads
   document.getElementById('btn-toc').addEventListener('click', toggleToc);
   document.getElementById('btn-close-toc').addEventListener('click', toggleToc);
+  document.getElementById('toc-list').addEventListener('click', (e) => {
+    e.preventDefault();
+    const a = e.target.closest('a[data-href]');
+    if (a) {
+      goToHref(a.dataset.href);
+      document.getElementById('toc-panel').classList.remove('open');
+    }
+  });
 
   // Close book
   document.getElementById('btn-close-book').addEventListener('click', closeBook);
@@ -231,26 +246,29 @@ async function openBook(file) {
     },
   });
 
-  // Load TOC
+  // Load TOC (with nested sub-items)
   const toc = await getToc();
   const tocList = document.getElementById('toc-list');
-  tocList.innerHTML = toc.map(item =>
-    `<li><a href="#" data-href="${item.href}">${item.label}</a></li>`
-  ).join('');
-  tocList.addEventListener('click', (e) => {
-    e.preventDefault();
-    const href = e.target.dataset.href;
-    if (href) {
-      goToHref(href);
-      document.getElementById('toc-panel').classList.remove('open');
+  tocList.innerHTML = renderTocItems(toc, 0);
+}
+
+function renderTocItems(items, depth) {
+  return items.map(item => {
+    const indent = depth > 0 ? ` style="padding-left:${16 + depth * 16}px"` : '';
+    let html = `<li><a href="#" data-href="${item.href}"${indent}>${item.label.trim()}</a></li>`;
+    if (item.subitems && item.subitems.length > 0) {
+      html += renderTocItems(item.subitems, depth + 1);
     }
-  });
+    return html;
+  }).join('');
 }
 
 function closeBook() {
+  destroyEpub();
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('toc-panel').classList.remove('open');
+  document.getElementById('toc-list').innerHTML = '';
 }
 
 function toggleToc() {
@@ -259,8 +277,11 @@ function toggleToc() {
 
 async function updateStats() {
   const stats = await getStats(currentLanguage);
-  // Count unique words on page that are unknown
-  const unknownOnPage = document.querySelectorAll('.hl-word.hl-unknown').length;
+  // Count unknown words inside the epub iframe (not the parent document)
+  const iframeDoc = getIframeDocument();
+  const unknownOnPage = iframeDoc
+    ? iframeDoc.querySelectorAll('.hl-word.hl-unknown').length
+    : 0;
   document.getElementById('stat-unknown').textContent = `? ${unknownOnPage}`;
   document.getElementById('stat-partial').textContent = `~ ${stats.partial}`;
   document.getElementById('stat-known').textContent = `\u2713 ${stats.known}`;
