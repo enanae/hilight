@@ -159,18 +159,24 @@ async function showDefinition(anchor, language, word) {
 
   // Dismiss popup on any NEW interaction. We gate on a timestamp so that
   // the synthetic click/touchstart from the same long-press gesture that
-  // opened the popup doesn't immediately close it (~300ms window).
+  // opened the popup doesn't immediately close it (~400ms window).
+  //
+  // IMPORTANT: Do NOT call preventDefault/stopPropagation here — that
+  // blocks all touch event propagation including scroll gestures.
+  // Instead, defer setting popupActive=false so word-tap handlers
+  // (which check popupActive) ignore this same event cycle.
   const showTime = Date.now();
   const DISMISS_GUARD_MS = 400;
   const dismiss = (e) => {
     if (Date.now() - showTime < DISMISS_GUARD_MS) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
+    // If the tap is inside the popup itself, ignore it (allow link clicks etc.)
+    if (popup.contains(e.target)) return;
     popup.remove();
-    popupActive = false;
     doc.removeEventListener('click', dismiss, true);
     doc.removeEventListener('touchstart', dismiss, true);
+    // Defer popupActive reset so that word-tap handlers still see
+    // popupActive=true for this event and ignore it.
+    setTimeout(() => { popupActive = false; }, 0);
   };
   doc.addEventListener('click', dismiss, true);
   doc.addEventListener('touchstart', dismiss, true);

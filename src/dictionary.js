@@ -82,7 +82,6 @@ function parseWiktionary(data, lang) {
   if (!sections || sections.length === 0) return null;
 
   const defs = [];
-  let wordText = '';
   for (const section of sections) {
     const pos = section.partOfSpeech || '';
     for (const d of (section.definitions || []).slice(0, 3)) {
@@ -95,7 +94,7 @@ function parseWiktionary(data, lang) {
   if (defs.length === 0) return null;
 
   return {
-    word: wordText || '',
+    word: '', // filled in by caller from the lookup word
     phonetic: '',
     definitions: defs.slice(0, 6),
   };
