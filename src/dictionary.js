@@ -4,14 +4,18 @@
  *
  * Built-in support:
  * - Free Dictionary API: https://dictionaryapi.dev/
- *   Works well for English, partial support for other languages.
+ *   v2 for English (Wiktionary-sourced), v1 for other languages
+ *   (Google Dictionary-sourced, kept for backward compatibility).
  * - Custom URL template: user provides a URL with {word} placeholder
  */
 
 const SETTINGS_KEY = 'hilight-dict-settings';
 
-/** Parse response from dictionaryapi.dev (same format for all languages). */
-function parseDictApiDev(data) {
+/**
+ * Parse v2 response from dictionaryapi.dev (English).
+ * v2 uses "meanings" array with partOfSpeech + definitions array.
+ */
+function parseV2(data) {
   if (!Array.isArray(data) || data.length === 0) return null;
   const entry = data[0];
   const meanings = entry.meanings || [];
@@ -29,13 +33,46 @@ function parseDictApiDev(data) {
   };
 }
 
-/** Built-in dictionary API configs for all supported languages. */
-const BUILTIN_APIS = {};
-for (const code of ['en', 'es', 'fr', 'de', 'it', 'pt', 'ko', 'ja', 'zh', 'ar', 'ru', 'hi', 'th', 'vi', 'tr', 'pl', 'nl', 'sv']) {
+/**
+ * Parse v1 response from dictionaryapi.dev (non-English languages).
+ * v1 uses "meaning" object keyed by part of speech, e.g.:
+ *   { "meaning": { "nom masculin": [{ "definition": "..." }] } }
+ */
+function parseV1(data) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const entry = data[0];
+  const meaning = entry.meaning || {};
+  const defs = [];
+  for (const [pos, defList] of Object.entries(meaning)) {
+    if (!Array.isArray(defList)) continue;
+    for (const d of defList.slice(0, 2)) {
+      defs.push({ partOfSpeech: pos, definition: d.definition || '' });
+    }
+  }
+  if (defs.length === 0) return null;
+  return {
+    word: entry.word,
+    phonetic: entry.phonetic || '',
+    definitions: defs,
+  };
+}
+
+/** Built-in dictionary API configs. */
+const BUILTIN_APIS = {
+  // English: v2 (Wiktionary-sourced, well maintained)
+  en: {
+    name: 'Free Dictionary API',
+    urlTemplate: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}',
+    parse: parseV2,
+  },
+};
+
+// All other languages: v1 (Google Dictionary-sourced, still served for backward compat)
+for (const code of ['es', 'fr', 'de', 'it', 'pt', 'ko', 'ja', 'zh', 'ar', 'ru', 'hi', 'th', 'vi', 'tr', 'pl', 'nl', 'sv']) {
   BUILTIN_APIS[code] = {
     name: 'Free Dictionary API',
-    urlTemplate: `https://api.dictionaryapi.dev/api/v2/entries/${code}/{word}`,
-    parse: parseDictApiDev,
+    urlTemplate: `https://api.dictionaryapi.dev/api/v1/entries/${code}/{word}`,
+    parse: parseV1,
   };
 }
 
@@ -92,11 +129,19 @@ function parseGeneric(word, data) {
 
   const definitions = [];
 
-  // Try common response shapes
+  // Try v2 shape first (meanings array)
   if (entry.meanings) {
     for (const m of entry.meanings) {
       for (const d of (m.definitions || []).slice(0, 2)) {
         definitions.push({ partOfSpeech: m.partOfSpeech || '', definition: d.definition || d.text || '' });
+      }
+    }
+  // Then v1 shape (meaning object keyed by pos)
+  } else if (entry.meaning && typeof entry.meaning === 'object') {
+    for (const [pos, defList] of Object.entries(entry.meaning)) {
+      if (!Array.isArray(defList)) continue;
+      for (const d of defList.slice(0, 2)) {
+        definitions.push({ partOfSpeech: pos, definition: d.definition || '' });
       }
     }
   } else if (entry.definitions) {

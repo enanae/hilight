@@ -7,7 +7,7 @@
  * for DOM events inside the iframe and re-emits them on the rendition.
  */
 import ePub from 'epubjs';
-import { highlightContainer, handleWordTap } from './highlighter.js';
+import { highlightContainer, handleWordTap, showWordDefinition, popupActive } from './highlighter.js';
 
 let currentBook = null;
 let currentRendition = null;
@@ -90,30 +90,63 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 }
 
 /**
- * Set up word tap handling through the rendition event system.
+ * Set up word interaction through the rendition event system.
  *
- * Two layers:
- * 1. rendition.on('click') — desktop + some mobile browsers
- * 2. rendition.on('touchend') — reliable on mobile; uses touchstart
- *    position tracking to distinguish taps from scrolls
+ * Short tap: cycle knowledge state (unknown → learning → known → ...)
+ * Long press (500ms): show dictionary definition
+ *
+ * On desktop, click = short tap, right-click or ctrl+click could be
+ * used for definition, but we keep it simple: click cycles, and the
+ * long-press logic handles touch.
  */
 function setupWordTapHandler(rendition, onStatsUpdate) {
   let touchStartX = 0;
   let touchStartY = 0;
-  let lastTapTime = 0;
+  let touchStartTime = 0;
+  let longPressTimer = null;
+  let longPressFired = false;
+  let lastActionTime = 0;
   const TAP_THRESHOLD = 10;
+  const LONG_PRESS_MS = 500;
   const DEBOUNCE_MS = 300;
 
   rendition.on('touchstart', (e) => {
-    if (e.touches && e.touches[0]) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
+    // Don't start new interactions while popup is showing
+    if (popupActive) return;
+    if (!e.touches || !e.touches[0]) return;
+    const t = e.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchStartTime = Date.now();
+    longPressFired = false;
+
+    // Start long-press timer
+    const span = findWordSpan(e.target);
+    if (span) {
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        longPressFired = true;
+        showWordDefinition(span);
+      }, LONG_PRESS_MS);
+    }
+  });
+
+  // Cancel long press if finger moves (scrolling)
+  rendition.on('touchmove', (e) => {
+    if (!e.changedTouches || !e.changedTouches[0]) return;
+    const t = e.changedTouches[0];
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+    if (dx > TAP_THRESHOLD || dy > TAP_THRESHOLD) {
+      clearTimeout(longPressTimer);
     }
   });
 
   rendition.on('touchend', (e) => {
-    if (!e.changedTouches || !e.changedTouches[0]) return;
+    clearTimeout(longPressTimer);
+    if (popupActive || longPressFired) return;
 
+    if (!e.changedTouches || !e.changedTouches[0]) return;
     const span = findWordSpan(e.target);
     if (!span) return;
 
@@ -121,22 +154,32 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     const dx = Math.abs(t.clientX - touchStartX);
     const dy = Math.abs(t.clientY - touchStartY);
 
+    // Short tap: cycle state
     if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD) {
       const now = Date.now();
-      if (now - lastTapTime < DEBOUNCE_MS) return;
-      lastTapTime = now;
+      if (now - lastActionTime < DEBOUNCE_MS) return;
+      lastActionTime = now;
       handleWordTap(span, onStatsUpdate);
     }
   });
 
+  // Desktop: click cycles state, dblclick shows definition
   rendition.on('click', (e) => {
+    if (popupActive) return;
     const span = findWordSpan(e.target);
     if (!span) return;
 
     const now = Date.now();
-    if (now - lastTapTime < DEBOUNCE_MS) return;
-    lastTapTime = now;
+    if (now - lastActionTime < DEBOUNCE_MS) return;
+    lastActionTime = now;
     handleWordTap(span, onStatsUpdate);
+  });
+
+  rendition.on('dblclick', (e) => {
+    if (popupActive) return;
+    const span = findWordSpan(e.target);
+    if (!span) return;
+    showWordDefinition(span);
   });
 }
 
