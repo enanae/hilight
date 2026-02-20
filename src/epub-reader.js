@@ -8,16 +8,21 @@
  */
 import ePub from 'epubjs';
 import { highlightContainer, handleWordTap, showWordDefinition, popupActive, resetPopupState } from './highlighter.js';
+import { tokenize, normalizeWord } from './tokenizer.js';
 
 let currentBook = null;
 let currentRendition = null;
 let currentLanguage = null;
 let currentOnStatsUpdate = null;
 let languageVersion = 0; // guards against overlapping setLanguage() calls
+let cachedBookWords = null;
+let cachedBookId = null;
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
   resetPopupState();
+  cachedBookWords = null;
+  cachedBookId = null;
   if (currentRendition) {
     // Remove all event emitter listeners we registered
     currentRendition.off('touchstart');
@@ -358,6 +363,48 @@ export function getIframeDocument() {
   return null;
 }
 
+/**
+ * Scan every section in the current book's spine and collect all unique
+ * normalized words. Returns a Set<string>. Cached per book.
+ * @param {function} [onProgress] - called with (fraction) 0..1 during scan
+ */
+export async function getAllBookWords(onProgress) {
+  if (!currentBook) return null;
+  const bookId = currentBook.key();
+  if (cachedBookId === bookId && cachedBookWords) return cachedBookWords;
+
+  const locale = langToLocale(currentLanguage);
+  const words = new Set();
+  const items = currentBook.spine.items;
+
+  for (let i = 0; i < items.length; i++) {
+    try {
+      const section = currentBook.spine.get(items[i].index);
+      const doc = await section.load(currentBook.load.bind(currentBook));
+      const body = doc.body || doc.documentElement;
+      if (body) {
+        const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const text = walker.currentNode.textContent;
+          if (!text.trim()) continue;
+          const segs = tokenize(text, locale);
+          for (const seg of segs) {
+            if (seg.isWord) words.add(normalizeWord(seg.text, locale));
+          }
+        }
+      }
+      section.unload();
+    } catch {
+      // Skip corrupt/missing sections
+    }
+    if (onProgress) onProgress((i + 1) / items.length);
+  }
+
+  cachedBookWords = words;
+  cachedBookId = bookId;
+  return words;
+}
+
 function showLoadingOverlay(viewerEl) {
   let overlay = viewerEl.querySelector('.hl-loading-overlay');
   if (!overlay) {
@@ -398,6 +445,15 @@ function setupEndOfSectionBanner(container, viewerEl) {
     banner.classList.toggle('visible', atBottom);
   };
   container.addEventListener('scroll', onScroll, { passive: true });
+}
+
+function langToLocale(lang) {
+  const map = {
+    en: 'en', es: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt',
+    ko: 'ko', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', hi: 'hi',
+    th: 'th', vi: 'vi', tr: 'tr', pl: 'pl', nl: 'nl', sv: 'sv',
+  };
+  return map[lang] || lang;
 }
 
 /** Inject highlight CSS into the epub's iframe document. */
