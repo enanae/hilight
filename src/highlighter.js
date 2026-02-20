@@ -78,7 +78,7 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
 }
 
 /**
- * Handle a tap/click on a word span.
+ * Handle a short tap on a word span — just cycle the knowledge state.
  * Called from epub-reader.js via rendition events.
  */
 export async function handleWordTap(span, onStatsUpdate) {
@@ -100,9 +100,16 @@ export async function handleWordTap(span, onStatsUpdate) {
     });
 
   if (onStatsUpdate) onStatsUpdate();
+}
 
-  // Show dictionary popup on first click (unknown -> learning)
-  if (level === 1 && hasDictionary(language)) {
+/**
+ * Handle a long press on a word span — show the dictionary definition.
+ * Called from epub-reader.js via rendition events.
+ */
+export function showWordDefinition(span) {
+  const word = span.dataset.word;
+  const language = span.dataset.language;
+  if (hasDictionary(language)) {
     showDefinition(span, language, word);
   }
 }
