@@ -17,12 +17,14 @@ let currentOnStatsUpdate = null;
 let languageVersion = 0; // guards against overlapping setLanguage() calls
 let cachedBookWords = null;
 let cachedBookId = null;
+let cachedBookLang = null;
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
   resetPopupState();
   cachedBookWords = null;
   cachedBookId = null;
+  cachedBookLang = null;
   if (currentRendition) {
     // Remove all event emitter listeners we registered
     currentRendition.off('touchstart');
@@ -371,7 +373,7 @@ export function getIframeDocument() {
 export async function getAllBookWords(onProgress) {
   if (!currentBook) return null;
   const bookId = currentBook.key();
-  if (cachedBookId === bookId && cachedBookWords) return cachedBookWords;
+  if (cachedBookId === bookId && cachedBookLang === currentLanguage && cachedBookWords) return cachedBookWords;
 
   const locale = langToLocale(currentLanguage);
   const words = new Set();
@@ -402,6 +404,7 @@ export async function getAllBookWords(onProgress) {
 
   cachedBookWords = words;
   cachedBookId = bookId;
+  cachedBookLang = currentLanguage;
   return words;
 }
 
