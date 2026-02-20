@@ -88,21 +88,43 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
 /**
  * Mark all unknown/partial words on the page as known (level 2).
  * Used by the "Mark page as known" toolbar button.
+ * Returns previous state for undo: [{language, word, level}, ...]
  */
 export async function markAllKnown(doc) {
   const spans = doc.querySelectorAll('.hl-word:not(.hl-known)');
   const updates = [];
   const seen = new Set();
+  const previousState = [];
   for (const span of spans) {
     const word = span.dataset.word;
     const language = span.dataset.language;
+    const prevLevel = parseInt(span.dataset.level, 10);
     const key = `${language}:${word}`;
     if (!seen.has(key)) {
       seen.add(key);
+      previousState.push({ language, word, level: prevLevel });
       updates.push(setLevel(language, word, LEVEL_KNOWN));
     }
     span.dataset.level = LEVEL_KNOWN;
     span.className = `hl-word ${LEVEL_CLASSES[LEVEL_KNOWN]}`;
+  }
+  await Promise.all(updates);
+  return previousState;
+}
+
+/**
+ * Restore word levels from a previous state snapshot.
+ * Used by undo after markAllKnown.
+ */
+export async function restoreWordLevels(doc, previousState) {
+  const updates = [];
+  for (const { language, word, level } of previousState) {
+    updates.push(setLevel(language, word, level));
+    doc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(language)}"]`)
+      .forEach(el => {
+        el.dataset.level = level;
+        el.className = `hl-word ${LEVEL_CLASSES[level]}`;
+      });
   }
   await Promise.all(updates);
 }

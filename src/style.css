@@ -906,6 +906,45 @@ html, body {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+/* === Undo Toast === */
+.undo-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  z-index: 2000;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: toast-in 0.25s ease-out;
+  max-width: 90%;
+}
+
+.undo-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.undo-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* === Scrollbar === */
 * {
   scrollbar-width: thin;

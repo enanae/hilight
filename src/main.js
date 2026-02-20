@@ -2,7 +2,7 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
-import { popupActive, markAllKnown } from './highlighter.js';
+import { popupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, isOpen as isVocabOpen } from './vocab-browser.js';
 
 const LANGUAGES = [
@@ -228,8 +228,7 @@ function bindEvents() {
       case 'k':
       case 'K':
         if (!e.ctrlKey && !e.metaKey) {
-          const iframeDoc = getIframeDocument();
-          if (iframeDoc) markAllKnown(iframeDoc).then(updateStats);
+          doMarkAllKnown();
         }
         break;
       case 'v':
@@ -264,13 +263,8 @@ function bindEvents() {
     toggleVocabPanel(currentLanguage, updateStats);
   });
 
-  // Mark all words on page as known
-  document.getElementById('btn-mark-known').addEventListener('click', async () => {
-    const iframeDoc = getIframeDocument();
-    if (!iframeDoc) return;
-    await markAllKnown(iframeDoc);
-    updateStats();
-  });
+  // Mark all words on page as known (with undo)
+  document.getElementById('btn-mark-known').addEventListener('click', doMarkAllKnown);
 
   // Close book
   document.getElementById('btn-close-book').addEventListener('click', closeBook);
@@ -327,6 +321,40 @@ function showError(msg) {
   toast.textContent = msg;
   document.getElementById('app').appendChild(toast);
   setTimeout(() => toast.remove(), 5000);
+}
+
+async function doMarkAllKnown() {
+  const iframeDoc = getIframeDocument();
+  if (!iframeDoc) return;
+  const prev = await markAllKnown(iframeDoc);
+  updateStats();
+  if (prev.length === 0) return;
+  showUndoToast(`Marked ${prev.length} words as known`, async () => {
+    await restoreWordLevels(iframeDoc, prev);
+    updateStats();
+  });
+}
+
+function showUndoToast(message, onUndo) {
+  const existing = document.querySelector('.undo-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'undo-toast';
+  toast.innerHTML = `<span>${message}</span><button class="undo-btn">Undo</button>`;
+  const btn = toast.querySelector('.undo-btn');
+  let dismissed = false;
+  btn.addEventListener('click', () => {
+    if (dismissed) return;
+    dismissed = true;
+    toast.remove();
+    onUndo();
+  });
+  document.getElementById('app').appendChild(toast);
+  const timer = setTimeout(() => {
+    dismissed = true;
+    toast.remove();
+  }, 6000);
+  // If user clicks undo, the timeout's remove() is harmless (already removed)
 }
 
 function renderTocItems(items, depth) {

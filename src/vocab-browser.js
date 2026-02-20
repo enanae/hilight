@@ -2,25 +2,33 @@
  * Vocabulary Browser: a slide-in panel that shows all saved vocab
  * for the current language, with grouping by stem, filtering by
  * level and book presence, and group-level bulk marking.
+ *
+ * Data model:
+ * - DB-only mode (default): shows words at level 1 or 2 from IndexedDB.
+ *   Level 0 words are not stored in the DB, so there's nothing to show
+ *   for "unknown" — the panel explains this.
+ * - "In this book" mode: scans the full epub spine and builds a word list
+ *   from the BOOK, then looks up each word's level from the DB (default 0).
+ *   All filters work: "?" shows words in the book you haven't learned yet.
  */
-import { getAllWords, setLevel } from './vocab-store.js';
+import { getAllWords, setLevel, getLevels } from './vocab-store.js';
 import { getAllBookWords, getIframeDocument } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_UNKNOWN, LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
-const LEVEL_LABELS = ['unknown', 'learning', 'known'];
 const LEVEL_CLASSES = ['vb-unknown', 'vb-partial', 'vb-known'];
 const LEVEL_SYMBOLS = ['?', '~', '\u2713'];
 
 let panelEl = null;
 let currentLanguage = null;
-let allWords = []; // [{word, level}]
-let bookWords = null; // Set<string> | null
+let displayWords = []; // [{word, level}] — the current working set
+let dbWords = [];      // [{word, level}] — from IndexedDB (level 1+2 only)
+let bookWordSet = null; // Set<string> | null — all normalized words in the book
 let bookScanInProgress = false;
 let activeFilter = 'all'; // 'all' | 0 | 1 | 2
 let inBookOnly = false;
 let searchQuery = '';
-let onStatsUpdate = null; // callback to refresh main stats bar
+let onStatsUpdate = null;
 
 /**
  * Create the panel DOM (once). Appended inside .main-area.
@@ -54,17 +62,14 @@ function ensurePanel() {
     <div class="vocab-summary"></div>
   `;
 
-  // Close button
   panelEl.querySelector('.vocab-close-btn').addEventListener('click', closePanel);
 
-  // Search
   const searchInput = panelEl.querySelector('.vocab-search');
   searchInput.addEventListener('input', () => {
     searchQuery = searchInput.value.toLowerCase().trim();
     renderList();
   });
 
-  // Level filter buttons
   panelEl.querySelector('.vocab-level-btns').addEventListener('click', (e) => {
     const btn = e.target.closest('.vocab-lvl-btn');
     if (!btn) return;
@@ -75,27 +80,25 @@ function ensurePanel() {
     renderList();
   });
 
-  // In-book toggle
   const bookCb = panelEl.querySelector('.vocab-book-cb');
   bookCb.addEventListener('change', async () => {
     inBookOnly = bookCb.checked;
-    if (inBookOnly && !bookWords && !bookScanInProgress) {
+    if (inBookOnly && !bookWordSet && !bookScanInProgress) {
       await scanBook();
     }
+    await rebuildDisplayWords();
     renderList();
   });
 
-  // Delegated click on the word list
   panelEl.querySelector('.vocab-list').addEventListener('click', (e) => {
-    // Group header toggle
     const header = e.target.closest('.vb-group-header');
     if (header) {
-      const group = header.closest('.vb-group');
-      group.classList.toggle('collapsed');
+      // Don't toggle if they clicked a mark button inside the header
+      if (e.target.closest('.vb-group-mark')) return;
+      header.closest('.vb-group').classList.toggle('collapsed');
       return;
     }
 
-    // Group-level "mark all" buttons
     const markBtn = e.target.closest('.vb-group-mark');
     if (markBtn) {
       const level = parseInt(markBtn.dataset.level, 10);
@@ -105,7 +108,6 @@ function ensurePanel() {
       return;
     }
 
-    // Individual word tap → cycle level
     const row = e.target.closest('.vb-word-row');
     if (row) {
       cycleWord(row.dataset.word);
@@ -124,24 +126,44 @@ export async function openPanel(language, statsCallback) {
   onStatsUpdate = statsCallback || null;
   ensurePanel();
 
-  // Close TOC if open
   document.getElementById('toc-panel')?.classList.remove('open');
 
-  // Reset filters
   searchQuery = '';
   const searchInput = panelEl.querySelector('.vocab-search');
   if (searchInput) searchInput.value = '';
 
-  // Load words from DB
-  allWords = await getAllWords(currentLanguage);
+  // Load saved words from DB
+  dbWords = await getAllWords(currentLanguage);
+
+  await rebuildDisplayWords();
 
   panelEl.classList.add('open');
   renderList();
 }
 
 /**
- * Close the vocab browser panel.
+ * Build the displayWords array based on current mode.
+ *
+ * DB-only mode: displayWords = dbWords (level 1 + 2 only).
+ * In-book mode: displayWords = every word in the book, with DB levels.
  */
+async function rebuildDisplayWords() {
+  if (inBookOnly && bookWordSet) {
+    // Build a level map from DB words for fast lookup
+    const levelMap = new Map();
+    for (const w of dbWords) levelMap.set(w.word, w.level);
+
+    // Also bulk-lookup any book words not in dbWords (they'll be level 0)
+    // dbWords only has level 1+2, so all level 0 words need no lookup — they default to 0
+    displayWords = [];
+    for (const word of bookWordSet) {
+      displayWords.push({ word, level: levelMap.get(word) || 0 });
+    }
+  } else {
+    displayWords = [...dbWords];
+  }
+}
+
 export function closePanel() {
   if (panelEl) panelEl.classList.remove('open');
 }
@@ -150,9 +172,6 @@ export function isOpen() {
   return panelEl?.classList.contains('open') ?? false;
 }
 
-/**
- * Toggle the panel.
- */
 export function togglePanel(language, statsCallback) {
   if (isOpen()) {
     closePanel();
@@ -169,13 +188,12 @@ async function scanBook() {
   const statusEl = panelEl.querySelector('.vocab-scan-status');
   statusEl.textContent = 'Scanning\u2026';
 
-  bookWords = await getAllBookWords((frac) => {
+  bookWordSet = await getAllBookWords((frac) => {
     statusEl.textContent = `${Math.round(frac * 100)}%`;
   });
 
   bookScanInProgress = false;
-  statusEl.textContent = bookWords ? `${bookWords.size} unique` : '';
-  renderList();
+  statusEl.textContent = bookWordSet ? `${bookWordSet.size} unique` : '';
 }
 
 /**
@@ -185,19 +203,35 @@ function renderList() {
   const listEl = panelEl.querySelector('.vocab-list');
   const summaryEl = panelEl.querySelector('.vocab-summary');
 
-  // 1. Filter
-  let filtered = allWords;
+  // 1. Filter by level
+  let filtered = displayWords;
   if (activeFilter !== 'all') {
     filtered = filtered.filter(w => w.level === activeFilter);
   }
-  if (inBookOnly && bookWords) {
-    filtered = filtered.filter(w => bookWords.has(w.word));
-  }
+
+  // 2. Filter by search
   if (searchQuery) {
     filtered = filtered.filter(w => w.word.includes(searchQuery));
   }
 
-  // 2. Group by stem
+  // 3. Empty state
+  if (filtered.length === 0) {
+    let msg;
+    if (displayWords.length === 0 && !inBookOnly) {
+      msg = 'No vocabulary saved yet.<br>Tap words while reading to build your list.';
+    } else if (displayWords.length === 0 && inBookOnly) {
+      msg = 'No book is open, or the scan found no words.';
+    } else if (activeFilter === 0 && !inBookOnly) {
+      msg = 'Unknown words are only visible with<br><strong>"In this book"</strong> enabled.';
+    } else {
+      msg = 'No words match the current filters.';
+    }
+    listEl.innerHTML = `<div class="vb-empty">${msg}</div>`;
+    summaryEl.textContent = '';
+    return;
+  }
+
+  // 4. Group by stem
   const groups = new Map();
   for (const w of filtered) {
     const s = stem(w.word, currentLanguage);
@@ -205,42 +239,28 @@ function renderList() {
     groups.get(s).push(w);
   }
 
-  // 3. Sort: multi-word groups first (by size desc), then alphabetical within
+  // 5. Sort: multi-word groups first (by size desc), then alphabetical
   const sorted = [...groups.entries()].sort((a, b) => {
     if (b[1].length !== a[1].length) return b[1].length - a[1].length;
     return a[0].localeCompare(b[0]);
   });
 
-  // 4. Render
-  if (sorted.length === 0) {
-    listEl.innerHTML = `<div class="vb-empty">${
-      allWords.length === 0
-        ? 'No vocabulary saved yet.<br>Tap words while reading to build your list.'
-        : 'No words match the current filters.'
-    }</div>`;
-    summaryEl.textContent = '';
-    return;
-  }
-
+  // 6. Render
   const totalWords = sorted.reduce((sum, [, ws]) => sum + ws.length, 0);
   const multiGroups = sorted.filter(([, ws]) => ws.length > 1).length;
 
   let html = '';
   for (const [stemKey, words] of sorted) {
-    // Sort words within group alphabetically
     words.sort((a, b) => a.word.localeCompare(b.word));
-
     const isSingle = words.length === 1;
 
     if (isSingle) {
-      // Flat row — no group header
       const w = words[0];
       html += `<div class="vb-word-row vb-flat-row" data-word="${esc(w.word)}">
         <span class="vb-word-text">${esc(w.word)}</span>
         <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
       </div>`;
     } else {
-      // Group with header + mark-all buttons
       html += `<div class="vb-group" data-stem="${esc(stemKey)}">
         <div class="vb-group-header">
           <span class="vb-group-chevron"></span>
@@ -270,42 +290,97 @@ function renderList() {
  * Cycle a single word's level (same as tapping in-reader).
  */
 async function cycleWord(word) {
-  const entry = allWords.find(w => w.word === word);
+  const entry = displayWords.find(w => w.word === word);
   if (!entry) return;
 
   const newLevel = (entry.level + 1) % 3;
   entry.level = newLevel;
   await setLevel(currentLanguage, word, newLevel);
 
-  // Update the row in the panel
+  // Keep dbWords in sync
+  const dbEntry = dbWords.find(w => w.word === word);
+  if (dbEntry) {
+    if (newLevel === 0) {
+      dbWords = dbWords.filter(w => w.word !== word);
+    } else {
+      dbEntry.level = newLevel;
+    }
+  } else if (newLevel !== 0) {
+    dbWords.push({ word, level: newLevel });
+  }
+
   updateRowBadge(word, newLevel);
-
-  // Update matching spans in the reader iframe
   syncReaderSpans(word, newLevel);
-
   if (onStatsUpdate) onStatsUpdate();
 }
 
 /**
- * Mark all words in a stem group to a target level.
+ * Mark all words in a stem group to a target level (with undo).
  */
 async function markGroup(stemKey, targetLevel) {
+  const previousState = [];
   const updates = [];
-  for (const entry of allWords) {
+  for (const entry of displayWords) {
     if (stem(entry.word, currentLanguage) === stemKey && entry.level !== targetLevel) {
+      previousState.push({ word: entry.word, level: entry.level });
       entry.level = targetLevel;
       updates.push(setLevel(currentLanguage, entry.word, targetLevel));
       syncReaderSpans(entry.word, targetLevel);
+
+      // Keep dbWords in sync
+      const dbEntry = dbWords.find(w => w.word === entry.word);
+      if (dbEntry) {
+        if (targetLevel === 0) {
+          dbWords = dbWords.filter(w => w.word !== entry.word);
+        } else {
+          dbEntry.level = targetLevel;
+        }
+      } else if (targetLevel !== 0) {
+        dbWords.push({ word: entry.word, level: targetLevel });
+      }
     }
   }
   await Promise.all(updates);
 
-  // Re-render group rows
+  // Re-render group rows in place
+  updateGroupRows(stemKey);
+
+  if (onStatsUpdate) onStatsUpdate();
+
+  if (previousState.length > 0) {
+    showUndoToast(`Marked ${previousState.length} words`, async () => {
+      const restoreUpdates = [];
+      for (const { word, level } of previousState) {
+        const entry = displayWords.find(e => e.word === word);
+        if (entry) entry.level = level;
+        restoreUpdates.push(setLevel(currentLanguage, word, level));
+        syncReaderSpans(word, level);
+
+        // Keep dbWords in sync on undo
+        const dbEntry = dbWords.find(w => w.word === word);
+        if (dbEntry) {
+          if (level === 0) {
+            dbWords = dbWords.filter(w => w.word !== word);
+          } else {
+            dbEntry.level = level;
+          }
+        } else if (level !== 0) {
+          dbWords.push({ word, level });
+        }
+      }
+      await Promise.all(restoreUpdates);
+      updateGroupRows(stemKey);
+      if (onStatsUpdate) onStatsUpdate();
+    });
+  }
+}
+
+function updateGroupRows(stemKey) {
   const groupEl = panelEl.querySelector(`.vb-group[data-stem="${CSS.escape(stemKey)}"]`);
   if (groupEl) {
     groupEl.querySelectorAll('.vb-word-row').forEach(row => {
       const w = row.dataset.word;
-      const entry = allWords.find(e => e.word === w);
+      const entry = displayWords.find(e => e.word === w);
       if (entry) {
         const badge = row.querySelector('.vb-badge');
         badge.className = `vb-badge ${LEVEL_CLASSES[entry.level]}`;
@@ -313,13 +388,29 @@ async function markGroup(stemKey, targetLevel) {
       }
     });
   }
-
-  if (onStatsUpdate) onStatsUpdate();
 }
 
-/**
- * Update a single word row's badge in the panel DOM.
- */
+function showUndoToast(message, onUndo) {
+  const existing = document.querySelector('.undo-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'undo-toast';
+  toast.innerHTML = `<span>${message}</span><button class="undo-btn">Undo</button>`;
+  const btn = toast.querySelector('.undo-btn');
+  let dismissed = false;
+  btn.addEventListener('click', () => {
+    if (dismissed) return;
+    dismissed = true;
+    toast.remove();
+    onUndo();
+  });
+  document.getElementById('app').appendChild(toast);
+  setTimeout(() => {
+    dismissed = true;
+    toast.remove();
+  }, 6000);
+}
+
 function updateRowBadge(word, level) {
   const row = panelEl.querySelector(`.vb-word-row[data-word="${CSS.escape(word)}"]`);
   if (!row) return;
@@ -328,9 +419,6 @@ function updateRowBadge(word, level) {
   badge.textContent = LEVEL_SYMBOLS[level];
 }
 
-/**
- * Sync a word's visual state in the reader iframe.
- */
 function syncReaderSpans(word, level) {
   const iframeDoc = getIframeDocument();
   if (!iframeDoc) return;
