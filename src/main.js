@@ -1,7 +1,7 @@
 import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
-import { saveDictSettings, loadDictSettings, hasDictionary } from './dictionary.js';
+import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
 import { popupActive } from './highlighter.js';
 
 const LANGUAGES = [
@@ -110,22 +110,28 @@ function renderApp() {
           <button id="btn-close-settings" class="toolbar-btn">&#10005;</button>
         </div>
         <div class="modal-body">
-          <p>Configure a dictionary API for <strong id="settings-lang-name"></strong>.</p>
-          <p class="hint">Use <code>{word}</code> as a placeholder in the URL. The API should return JSON.</p>
+          <p>Dictionary for <strong id="settings-lang-name"></strong>:</p>
           <label>
-            API URL template:
-            <input type="text" id="dict-url" class="input-full"
-              placeholder="https://api.example.com/lookup/{word}" />
+            Provider:
+            <select id="dict-provider" class="input-full">
+              ${getProviderChoices().map(p =>
+                `<option value="${p.id}">${p.name} &mdash; ${p.description}</option>`
+              ).join('')}
+              <option value="custom">Custom URL</option>
+            </select>
           </label>
-          <label>
-            Display name:
-            <input type="text" id="dict-name" class="input-full" placeholder="My Dictionary" />
-          </label>
+          <div id="custom-url-fields" class="custom-url-fields" style="display:none">
+            <label>
+              API URL template:
+              <input type="text" id="dict-url" class="input-full"
+                placeholder="https://api.example.com/{lang}/{word}" />
+            </label>
+            <p class="hint">Use <code>{word}</code> for the word and <code>{lang}</code> for the language code.</p>
+          </div>
           <div class="modal-actions">
             <button id="btn-save-dict" class="btn-primary">Save</button>
-            <button id="btn-clear-dict" class="btn-secondary">Clear</button>
+            <button id="btn-reset-dict" class="btn-secondary">Reset to default</button>
           </div>
-          <p class="hint" id="dict-builtin-note"></p>
         </div>
       </div>
     </div>
@@ -199,7 +205,8 @@ function bindEvents() {
   document.querySelector('#settings-modal .modal-backdrop').addEventListener('click', closeSettings);
   document.querySelector('#settings-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
   document.getElementById('btn-save-dict').addEventListener('click', saveDict);
-  document.getElementById('btn-clear-dict').addEventListener('click', clearDict);
+  document.getElementById('btn-reset-dict').addEventListener('click', resetDict);
+  document.getElementById('dict-provider').addEventListener('change', onProviderChange);
 
   // Export / Import
   document.getElementById('btn-export').addEventListener('click', doExport);
@@ -264,13 +271,19 @@ function openSettings() {
   const langName = LANGUAGES.find(l => l.code === currentLanguage)?.name || currentLanguage;
   document.getElementById('settings-lang-name').textContent = langName;
 
+  // Set the dropdown to the currently active provider
   const settings = loadDictSettings();
-  const current = settings[currentLanguage];
-  document.getElementById('dict-url').value = current?.urlTemplate || '';
-  document.getElementById('dict-name').value = current?.name || '';
+  const saved = settings[currentLanguage];
+  // Handle old settings format: urlTemplate without provider means custom
+  const activeId = (saved?.urlTemplate && !saved?.provider) ? 'custom' : getActiveProviderId(currentLanguage);
+  const providerSelect = document.getElementById('dict-provider');
+  providerSelect.value = activeId;
 
-  const builtinNote = document.getElementById('dict-builtin-note');
-  builtinNote.textContent = 'A built-in free dictionary is included. You can override it with a custom API.';
+  // Load custom URL if saved
+  document.getElementById('dict-url').value = saved?.urlTemplate || '';
+
+  // Show/hide custom URL fields
+  toggleCustomFields(activeId === 'custom');
 
   modal.classList.add('open');
 }
@@ -279,17 +292,32 @@ function closeSettings() {
   document.getElementById('settings-modal').classList.remove('open');
 }
 
-function saveDict() {
-  const url = document.getElementById('dict-url').value.trim();
-  const name = document.getElementById('dict-name').value.trim() || 'Custom Dictionary';
-  if (!url) {
-    document.getElementById('dict-url').focus();
-    return;
-  }
+function onProviderChange() {
+  const selected = document.getElementById('dict-provider').value;
+  toggleCustomFields(selected === 'custom');
+}
 
-  const settings = loadDictSettings();
-  settings[currentLanguage] = { urlTemplate: url, name };
-  saveDictSettings(settings);
+function toggleCustomFields(show) {
+  document.getElementById('custom-url-fields').style.display = show ? 'block' : 'none';
+}
+
+function saveDict() {
+  const provider = document.getElementById('dict-provider').value;
+
+  if (provider === 'custom') {
+    const url = document.getElementById('dict-url').value.trim();
+    if (!url) {
+      document.getElementById('dict-url').focus();
+      return;
+    }
+    const settings = loadDictSettings();
+    settings[currentLanguage] = { provider: 'custom', urlTemplate: url };
+    saveDictSettings(settings);
+  } else {
+    const settings = loadDictSettings();
+    settings[currentLanguage] = { provider };
+    saveDictSettings(settings);
+  }
 
   // Flash save confirmation
   const btn = document.getElementById('btn-save-dict');
@@ -302,12 +330,16 @@ function saveDict() {
   }, 600);
 }
 
-function clearDict() {
+function resetDict() {
   const settings = loadDictSettings();
   delete settings[currentLanguage];
   saveDictSettings(settings);
+
+  // Reset UI to defaults
+  const defaultId = getActiveProviderId(currentLanguage);
+  document.getElementById('dict-provider').value = defaultId;
   document.getElementById('dict-url').value = '';
-  document.getElementById('dict-name').value = '';
+  toggleCustomFields(false);
 }
 
 async function doExport() {
