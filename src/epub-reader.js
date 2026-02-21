@@ -354,6 +354,16 @@ export async function setLanguage(language) {
   }
 }
 
+/** True when a book is currently loaded and rendition is active. */
+export function isBookLoaded() {
+  return currentBook !== null;
+}
+
+/** Stable identifier for the current book (null when no book loaded). */
+export function getBookId() {
+  return currentBook ? currentBook.key() : null;
+}
+
 /** Get the active iframe document (for querying highlighted words). */
 export function getIframeDocument() {
   if (!currentRendition?.manager) return null;

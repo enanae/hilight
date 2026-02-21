@@ -46,6 +46,7 @@ vi.mock('../src/highlighter.js', () => ({
 vi.mock('../src/vocab-browser.js', () => ({
   togglePanel: vi.fn(),
   closePanel: vi.fn(),
+  resetBookState: vi.fn(),
 }));
 
 vi.mock('../src/style.css', () => ({}));
@@ -56,7 +57,7 @@ import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHr
 import { getStats, exportVocab, importVocab } from '../src/vocab-store.js';
 import { saveDictSettings, loadDictSettings, getActiveProviderId } from '../src/dictionary.js';
 import { markAllKnown, restoreWordLevels } from '../src/highlighter.js';
-import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel } from '../src/vocab-browser.js';
+import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from '../src/vocab-browser.js';
 import * as highlighterModule from '../src/highlighter.js';
 
 // ── Bootstrap: create #app then dynamically import main.js ──────────────
@@ -598,6 +599,7 @@ describe('Close Book', () => {
 
     expect(destroyEpub).toHaveBeenCalled();
     expect(closeVocabPanel).toHaveBeenCalled();
+    expect(resetVocabBookState).toHaveBeenCalled();
     expect(document.getElementById('reader-area').classList.contains('open')).toBe(false);
     expect(document.getElementById('upload-area').classList.contains('hidden')).toBe(false);
     expect(document.getElementById('toc-panel').classList.contains('open')).toBe(false);
