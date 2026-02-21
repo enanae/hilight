@@ -58,9 +58,9 @@ function renderApp() {
             ).join('')}
           </select>
         </label>
-        <button id="btn-settings" class="icon-btn" title="Dictionary settings">&#9881;</button>
-        <button id="btn-export" class="icon-btn" title="Export vocabulary">&#8681;</button>
-        <button id="btn-import" class="icon-btn" title="Import vocabulary">&#8679;</button>
+        <button id="btn-settings" class="icon-btn" title="Dictionary settings" aria-label="Dictionary settings">&#9881;</button>
+        <button id="btn-export" class="icon-btn" title="Export vocabulary as JSON" aria-label="Export vocabulary">&#8681;</button>
+        <button id="btn-import" class="icon-btn" title="Import vocabulary from JSON" aria-label="Import vocabulary">&#8679;</button>
       </div>
     </header>
 
@@ -94,11 +94,11 @@ function renderApp() {
 
       <div id="reader-area" class="reader-area">
         <div class="reader-toolbar">
-          <button id="btn-toc" class="toolbar-btn" title="Table of contents">&#9776; TOC</button>
+          <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label"> Contents</span></button>
           <span id="book-title" class="book-title"></span>
-          <button id="btn-mark-known" class="toolbar-btn" title="Mark all words on this page as known">&#10003; All known</button>
-          <button id="btn-vocab" class="toolbar-btn" title="Browse vocabulary (V)">Aa</button>
-          <button id="btn-close-book" class="toolbar-btn" title="Close book">&#10005;</button>
+          <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> Page known</span></button>
+          <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label"> Vocab</span></button>
+          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close book</span></button>
         </div>
         <div class="reader-nav">
           <button id="btn-prev" class="nav-btn" title="Previous">&lsaquo;</button>
