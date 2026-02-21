@@ -3,13 +3,73 @@
  * for the current language, with grouping by stem, filtering by
  * level and book presence, and group-level bulk marking.
  *
- * Data model:
- * - DB-only mode (default): shows words at level 1 or 2 from IndexedDB.
- *   Level 0 words are not stored in the DB, so there's nothing to show
- *   for "unknown" — the panel explains this.
- * - "In this book" mode: scans the full epub spine and builds a word list
+ * ── UX State Machine ───────────────────────────────────────────
+ *
+ * The panel has four main states, determined by two booleans:
+ *
+ *   isBookLoaded()  ×  inBookOnly
+ *   ───────────────────────────────────────────────────────────
+ *   false × false   NO_BOOK       Book toggle disabled, "No book open".
+ *                                 Shows saved words (level 1+2) from DB.
+ *                                 Empty state: "No vocabulary saved yet."
+ *
+ *   true  × false   BOOK_DB_ONLY  Book toggle enabled but unchecked.
+ *                                 Shows saved words (level 1+2) from DB.
+ *                                 Same display as NO_BOOK but toggle is
+ *                                 available for the user to activate.
+ *
+ *   true  × true    BOOK_ACTIVE   Book toggle checked. Scans the epub
+ *     (bookWordSet                spine and shows ALL book words with
+ *      is non-null)               their DB levels (default 0 = unknown).
+ *                                 All filters including "?" work.
+ *
+ *   true  × true    BOOK_SCANNING Transient: scan in progress.
+ *     (bookWordSet                Shows "Scanning…" / percentage.
+ *      is null)                   Falls back to DB-only display until
+ *                                 scan completes.
+ *
+ * ── State Lifecycle ────────────────────────────────────────────
+ *
+ * openPanel():
+ *   ALWAYS resets:  searchQuery
+ *   RESETS on book change (bookId !== lastBookId):
+ *     bookWordSet, bookScanInProgress, inBookOnly
+ *   PRESERVES across re-opens of same book:
+ *     inBookOnly, bookWordSet, activeFilter
+ *   SYNCS from epub-reader:
+ *     checkbox disabled/enabled, status text
+ *
+ * closePanel():    Only hides the panel. All state preserved.
+ * resetBookState(): Full wipe — call on book close.
+ *
+ * ── Visual Symbols ─────────────────────────────────────────────
+ *
+ *   Symbol  Level  CSS class    Meaning (user-facing)
+ *   ───────────────────────────────────────────────────
+ *   ?       0      vb-unknown   Unknown — haven't learned yet
+ *   ~       1      vb-partial   Learning — recognized but not solid
+ *   ✓       2      vb-known     Known — confident in this word
+ *
+ * These symbols appear in: filter buttons, word row badges, and
+ * group mark buttons. The "?" filter only produces results in
+ * BOOK_ACTIVE mode (DB doesn't store level-0 words).
+ *
+ * ── Event Delegation (vocab-list click handler) ────────────────
+ *
+ * Priority order (first match wins, then returns):
+ *   1. .vb-group-mark  → markGroup() — bulk level change
+ *   2. .vb-group-header → toggle collapsed — expand/collapse group
+ *   3. .vb-word-row     → cycleWord() — cycle single word level
+ *
+ * Mark buttons are nested inside headers, so they MUST be checked
+ * first to prevent a click on "~" from toggling the group closed.
+ *
+ * ── Data Model ─────────────────────────────────────────────────
+ *
+ * DB-only mode: displayWords = dbWords (level 1+2 only from IndexedDB).
+ *   Level 0 words are not stored in the DB.
+ * "In this book" mode: scans the full epub spine and builds a word list
  *   from the BOOK, then looks up each word's level from the DB (default 0).
- *   All filters work: "?" shows words in the book you haven't learned yet.
  */
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
 import { getAllBookWords, getIframeDocument, isBookLoaded, getBookId } from './epub-reader.js';
