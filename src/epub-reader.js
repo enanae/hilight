@@ -8,7 +8,7 @@
  */
 import ePub from 'epubjs';
 import { highlightContainer, handleWordTap, showWordDefinition, popupActive, resetPopupState } from './highlighter.js';
-import { tokenize, normalizeWord } from './tokenizer.js';
+import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 
 let currentBook = null;
 let currentRendition = null;
@@ -46,7 +46,7 @@ export function destroyEpub() {
  * @param {File|ArrayBuffer} source - epub file or array buffer
  * @param {HTMLElement} viewerEl - container element for the reader
  * @param {string} language - language code for vocab tracking
- * @param {object} options - { onStatsUpdate, onChapterChange, onBookLoaded }
+ * @param {object} options - { onStatsUpdate, onBookLoaded }
  */
 export async function loadEpub(source, viewerEl, language, options = {}) {
   // Clean up previous book
@@ -448,15 +448,6 @@ function setupEndOfSectionBanner(container, viewerEl) {
     banner.classList.toggle('visible', atBottom);
   };
   container.addEventListener('scroll', onScroll, { passive: true });
-}
-
-function langToLocale(lang) {
-  const map = {
-    en: 'en', es: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt',
-    ko: 'ko', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', hi: 'hi',
-    th: 'th', vi: 'vi', tr: 'tr', pl: 'pl', nl: 'nl', sv: 'sv',
-  };
-  return map[lang] || lang;
 }
 
 /** Inject highlight CSS into the epub's iframe document. */

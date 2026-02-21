@@ -86,17 +86,6 @@ export async function getLevels(language, words) {
   return map;
 }
 
-/** Get all words for a language at a given level. */
-export async function getWordsByLevel(language, level) {
-  const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const idx = store.index('by_level');
-    const req = idx.getAll([language, level]);
-    req.onsuccess = () => resolve(req.result.map(r => r.word));
-    req.onerror = () => reject(req.error);
-  });
-}
-
 /** Get vocabulary stats for a language. */
 export async function getStats(language) {
   const store = await tx('readonly');

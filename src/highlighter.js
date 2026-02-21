@@ -5,7 +5,7 @@
  * This module is PURELY about DOM manipulation — no event handlers.
  * Event handling is done in epub-reader.js via epubjs's rendition events.
  */
-import { tokenize, normalizeWord } from './tokenizer.js';
+import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 import { getLevel, setLevel, getLevels } from './vocab-store.js';
 import { lookupWord, hasDictionary } from './dictionary.js';
 
@@ -255,13 +255,4 @@ function escapeHtml(str) {
   const el = document.createElement('span');
   el.textContent = str;
   return el.innerHTML;
-}
-
-function langToLocale(lang) {
-  const map = {
-    en: 'en', es: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt',
-    ko: 'ko', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', hi: 'hi',
-    th: 'th', vi: 'vi', tr: 'tr', pl: 'pl', nl: 'nl', sv: 'sv',
-  };
-  return map[lang] || lang;
 }

@@ -14,7 +14,7 @@
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
 import { getAllBookWords, getIframeDocument } from './epub-reader.js';
 import { stem } from './stemmer.js';
-import { LEVEL_UNKNOWN, LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
+import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
 const LEVEL_CLASSES = ['vb-unknown', 'vb-partial', 'vb-known'];
 const LEVEL_SYMBOLS = ['?', '~', '\u2713'];
