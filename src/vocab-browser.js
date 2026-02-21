@@ -34,8 +34,11 @@
  *   ALWAYS resets:  searchQuery
  *   RESETS on book change (bookId !== lastBookId):
  *     bookWordSet, bookScanInProgress, inBookOnly
+ *   AUTO-ENABLES when book loaded:
+ *     inBookOnly = true, triggers scan if bookWordSet is null.
+ *     User sees book words immediately without manual checkbox toggle.
  *   PRESERVES across re-opens of same book:
- *     inBookOnly, bookWordSet, activeFilter
+ *     bookWordSet (scan cache), activeFilter
  *   SYNCS from epub-reader:
  *     checkbox disabled/enabled, status text
  *
@@ -249,6 +252,9 @@ function ensurePanel() {
  *   and inBookOnly resets to false so the user starts fresh.
  * - If the same book is still open, previous in-book state is preserved
  *   so re-opening the panel feels seamless.
+ * - When a book IS loaded, auto-enables "In this book" mode and scans
+ *   if needed, so the user sees book words immediately without having
+ *   to discover and toggle a checkbox.
  */
 export async function openPanel(language, statsCallback) {
   currentLanguage = language;
@@ -283,7 +289,11 @@ export async function openPanel(language, statsCallback) {
     statusEl.textContent = 'No book open';
   } else {
     bookCb.disabled = false;
-    bookCb.checked = inBookOnly;
+    // Auto-enable book mode when a book is loaded — the user opened the
+    // vocab panel from within a book, so "words in this book" is the
+    // natural expectation. They can uncheck to see DB-only if they want.
+    inBookOnly = true;
+    bookCb.checked = true;
     if (bookWordSet) {
       statusEl.textContent = `${bookWordSet.size} unique`;
     } else {
@@ -295,6 +305,11 @@ export async function openPanel(language, statsCallback) {
 
   // Load saved words from DB
   dbWords = await getAllWords(currentLanguage);
+
+  // If book mode is active but we haven't scanned yet, scan now
+  if (inBookOnly && !bookWordSet && !bookScanInProgress) {
+    await scanBook();
+  }
 
   await rebuildDisplayWords();
 

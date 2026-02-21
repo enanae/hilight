@@ -309,6 +309,17 @@ html, body {
   color: var(--accent);
 }
 
+.btn-close-book {
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.btn-close-book:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
 .book-title {
   flex: 1;
   font-weight: 600;
@@ -1071,7 +1082,7 @@ html, body {
     font-size: 48px;
   }
 
-  /* Reader toolbar: tighter on mobile */
+  /* Reader toolbar: tighter on mobile, icon-only buttons */
   .reader-toolbar {
     padding: 6px 8px;
     gap: 6px;
@@ -1080,6 +1091,10 @@ html, body {
   .toolbar-btn {
     padding: 4px 8px;
     font-size: 12px;
+  }
+
+  .btn-label {
+    display: none;
   }
 
   /* Undo toast: avoid overlap with phone gesture bars */

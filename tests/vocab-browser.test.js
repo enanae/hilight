@@ -980,8 +980,9 @@ describe('Forget book words', () => {
 
 describe('In-book mode', () => {
   // These tests simulate a book being loaded by mocking isBookLoaded
-  // and getBookId. The panel enables the "In this book" checkbox only
-  // when a book is detected.
+  // and getBookId. When a book is detected, openPanel auto-enables
+  // "In this book" mode and triggers a scan, so the user sees book
+  // words immediately.
 
   it('book toggle is disabled when no book is loaded', async () => {
     isBookLoaded.mockReturnValue(false);
@@ -995,17 +996,7 @@ describe('In-book mode', () => {
     expect(statusEl.textContent).toBe('No book open');
   });
 
-  it('book toggle is enabled when a book is loaded', async () => {
-    isBookLoaded.mockReturnValue(true);
-    getBookId.mockReturnValue('book-1');
-    getAllWords.mockResolvedValueOnce([]);
-    await openPanel('en');
-
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    expect(bookCb.disabled).toBe(false);
-  });
-
-  it('enabling book toggle triggers a scan and shows book words', async () => {
+  it('auto-enables book mode and scans when a book is loaded', async () => {
     isBookLoaded.mockReturnValue(true);
     getBookId.mockReturnValue('book-1');
     const bookWords = new Set(['hello', 'world']);
@@ -1013,11 +1004,12 @@ describe('In-book mode', () => {
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
 
+    // Checkbox should be auto-checked and enabled
     const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
+    expect(bookCb.disabled).toBe(false);
+    expect(bookCb.checked).toBe(true);
 
+    // Book words should appear immediately without manual toggle
     const rows = wordRows();
     expect(rows.length).toBe(2);
     const words = rows.map(r => r.dataset.word).sort();
@@ -1034,13 +1026,8 @@ describe('In-book mode', () => {
     ]);
     await openPanel('en');
 
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
-
-    const rows = wordRows();
-    expect(rows.length).toBe(3);
+    // All 3 book words shown: alpha (level 1), beta (level 0), gamma (level 0)
+    expect(wordRows().length).toBe(3);
   });
 
   it('level 0 filter shows unknown words in book mode', async () => {
@@ -1053,18 +1040,13 @@ describe('In-book mode', () => {
     ]);
     await openPanel('en');
 
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
-
     clickFilter('0');
     const unknownRows = wordRows();
     expect(unknownRows.length).toBe(1);
     expect(unknownRows[0].dataset.word).toBe('mystery');
   });
 
-  it('disabling book toggle reverts to DB-only mode', async () => {
+  it('unchecking book toggle reverts to DB-only mode', async () => {
     isBookLoaded.mockReturnValue(true);
     getBookId.mockReturnValue('book-4');
     const bookWords = new Set(['hello', 'world']);
@@ -1074,20 +1056,15 @@ describe('In-book mode', () => {
     ]);
     await openPanel('en');
 
-    const bookCb = panel().querySelector('.vocab-book-cb');
-
-    // Enable book mode
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
+    // Auto-enabled: should show both book words
     expect(wordRows().length).toBe(2);
 
-    // Disable book mode
+    // User unchecks → DB-only
+    const bookCb = panel().querySelector('.vocab-book-cb');
     bookCb.checked = false;
     bookCb.dispatchEvent(new Event('change'));
     await flush();
 
-    // DB-only: only "hello" at level 1
     expect(wordRows().length).toBe(1);
     expect(wordRows()[0].dataset.word).toBe('hello');
   });
@@ -1100,11 +1077,7 @@ describe('In-book mode', () => {
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
 
-    // First scan
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
+    // openPanel auto-scanned
     expect(getAllBookWords).toHaveBeenCalledTimes(1);
     vi.clearAllMocks();
 
@@ -1115,11 +1088,8 @@ describe('In-book mode', () => {
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
 
-    // inBookOnly was preserved (same book), toggle it on
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
     expect(getAllBookWords).not.toHaveBeenCalled();
+    expect(wordRows().length).toBe(1);
   });
 
   it('invalidates bookWordSet when book changes', async () => {
@@ -1130,11 +1100,6 @@ describe('In-book mode', () => {
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
 
-    // Scan book A
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
     expect(wordRows().length).toBe(1);
     expect(wordRows()[0].dataset.word).toBe('apple');
 
@@ -1148,10 +1113,7 @@ describe('In-book mode', () => {
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
 
-    // Scan book B
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
+    // openPanel auto-scans book B
     expect(wordRows().length).toBe(2);
     const words = wordRows().map(r => r.dataset.word).sort();
     expect(words).toEqual(['banana', 'berry']);
@@ -1164,11 +1126,6 @@ describe('In-book mode', () => {
     getAllBookWords.mockResolvedValueOnce(bookWords);
     getAllWords.mockResolvedValueOnce([]);
     await openPanel('en');
-
-    const bookCb = panel().querySelector('.vocab-book-cb');
-    bookCb.checked = true;
-    bookCb.dispatchEvent(new Event('change'));
-    await flush();
 
     const statusEl = panel().querySelector('.vocab-scan-status');
     expect(statusEl.textContent).toBe('3 unique');
