@@ -3,7 +3,7 @@ import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, dest
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
 import { popupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
-import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel } from './vocab-browser.js';
+import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -370,6 +370,7 @@ function renderTocItems(items, depth) {
 function closeBook() {
   destroyEpub();
   closeVocabPanel();
+  resetVocabBookState();
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('toc-panel').classList.remove('open');

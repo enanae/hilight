@@ -3,16 +3,76 @@
  * for the current language, with grouping by stem, filtering by
  * level and book presence, and group-level bulk marking.
  *
- * Data model:
- * - DB-only mode (default): shows words at level 1 or 2 from IndexedDB.
- *   Level 0 words are not stored in the DB, so there's nothing to show
- *   for "unknown" — the panel explains this.
- * - "In this book" mode: scans the full epub spine and builds a word list
+ * ── UX State Machine ───────────────────────────────────────────
+ *
+ * The panel has four main states, determined by two booleans:
+ *
+ *   isBookLoaded()  ×  inBookOnly
+ *   ───────────────────────────────────────────────────────────
+ *   false × false   NO_BOOK       Book toggle disabled, "No book open".
+ *                                 Shows saved words (level 1+2) from DB.
+ *                                 Empty state: "No vocabulary saved yet."
+ *
+ *   true  × false   BOOK_DB_ONLY  Book toggle enabled but unchecked.
+ *                                 Shows saved words (level 1+2) from DB.
+ *                                 Same display as NO_BOOK but toggle is
+ *                                 available for the user to activate.
+ *
+ *   true  × true    BOOK_ACTIVE   Book toggle checked. Scans the epub
+ *     (bookWordSet                spine and shows ALL book words with
+ *      is non-null)               their DB levels (default 0 = unknown).
+ *                                 All filters including "?" work.
+ *
+ *   true  × true    BOOK_SCANNING Transient: scan in progress.
+ *     (bookWordSet                Shows "Scanning…" / percentage.
+ *      is null)                   Falls back to DB-only display until
+ *                                 scan completes.
+ *
+ * ── State Lifecycle ────────────────────────────────────────────
+ *
+ * openPanel():
+ *   ALWAYS resets:  searchQuery
+ *   RESETS on book change (bookId !== lastBookId):
+ *     bookWordSet, bookScanInProgress, inBookOnly
+ *   PRESERVES across re-opens of same book:
+ *     inBookOnly, bookWordSet, activeFilter
+ *   SYNCS from epub-reader:
+ *     checkbox disabled/enabled, status text
+ *
+ * closePanel():    Only hides the panel. All state preserved.
+ * resetBookState(): Full wipe — call on book close.
+ *
+ * ── Visual Symbols ─────────────────────────────────────────────
+ *
+ *   Symbol  Level  CSS class    Meaning (user-facing)
+ *   ───────────────────────────────────────────────────
+ *   ?       0      vb-unknown   Unknown — haven't learned yet
+ *   ~       1      vb-partial   Learning — recognized but not solid
+ *   ✓       2      vb-known     Known — confident in this word
+ *
+ * These symbols appear in: filter buttons, word row badges, and
+ * group mark buttons. The "?" filter only produces results in
+ * BOOK_ACTIVE mode (DB doesn't store level-0 words).
+ *
+ * ── Event Delegation (vocab-list click handler) ────────────────
+ *
+ * Priority order (first match wins, then returns):
+ *   1. .vb-group-mark  → markGroup() — bulk level change
+ *   2. .vb-group-header → toggle collapsed — expand/collapse group
+ *   3. .vb-word-row     → cycleWord() — cycle single word level
+ *
+ * Mark buttons are nested inside headers, so they MUST be checked
+ * first to prevent a click on "~" from toggling the group closed.
+ *
+ * ── Data Model ─────────────────────────────────────────────────
+ *
+ * DB-only mode: displayWords = dbWords (level 1+2 only from IndexedDB).
+ *   Level 0 words are not stored in the DB.
+ * "In this book" mode: scans the full epub spine and builds a word list
  *   from the BOOK, then looks up each word's level from the DB (default 0).
- *   All filters work: "?" shows words in the book you haven't learned yet.
  */
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
-import { getAllBookWords, getIframeDocument } from './epub-reader.js';
+import { getAllBookWords, getIframeDocument, isBookLoaded, getBookId } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
@@ -27,6 +87,7 @@ let bookWordSet = null; // Set<string> | null — all normalized words in the bo
 let bookScanInProgress = false;
 let activeFilter = 'all'; // 'all' | 0 | 1 | 2
 let inBookOnly = false;
+let lastBookId = null;
 let searchQuery = '';
 let onStatsUpdate = null;
 
@@ -90,20 +151,20 @@ function ensurePanel() {
   panelEl.innerHTML = `
     <div class="vocab-header">
       <strong>Vocabulary</strong>
-      <button class="toolbar-btn vocab-close-btn">\u2715</button>
+      <button class="toolbar-btn vocab-close-btn" aria-label="Close">\u2715</button>
     </div>
     <div class="vocab-filters">
       <input type="search" class="vocab-search input-full" placeholder="Search words\u2026" />
       <div class="vocab-level-btns">
-        <button class="vocab-lvl-btn active" data-filter="all">All</button>
-        <button class="vocab-lvl-btn vb-unknown" data-filter="0">?</button>
-        <button class="vocab-lvl-btn vb-partial" data-filter="1">~</button>
-        <button class="vocab-lvl-btn vb-known" data-filter="2">\u2713</button>
+        <button class="vocab-lvl-btn active" data-filter="all" title="Show all saved words">All</button>
+        <button class="vocab-lvl-btn vb-unknown" data-filter="0" title="Unknown words (book mode only)">?</button>
+        <button class="vocab-lvl-btn vb-partial" data-filter="1" title="Words you are learning">~</button>
+        <button class="vocab-lvl-btn vb-known" data-filter="2" title="Words you know">\u2713</button>
       </div>
       <label class="vocab-book-toggle">
-        <input type="checkbox" class="vocab-book-cb" />
-        <span>In this book</span>
-        <span class="vocab-scan-status"></span>
+        <input type="checkbox" class="vocab-book-cb" disabled />
+        <span class="vocab-book-label">In this book</span>
+        <span class="vocab-scan-status">No book open</span>
       </label>
     </div>
     <div class="vocab-list"></div>
@@ -180,6 +241,14 @@ function ensurePanel() {
 
 /**
  * Open the vocab browser panel.
+ *
+ * UX state on open:
+ * - Search is cleared.
+ * - Book toggle is enabled/disabled based on whether a book is loaded.
+ * - If the book changed since last open, cached bookWordSet is invalidated
+ *   and inBookOnly resets to false so the user starts fresh.
+ * - If the same book is still open, previous in-book state is preserved
+ *   so re-opening the panel feels seamless.
  */
 export async function openPanel(language, statsCallback) {
   currentLanguage = language;
@@ -191,6 +260,38 @@ export async function openPanel(language, statsCallback) {
   searchQuery = '';
   const searchInput = panelEl.querySelector('.vocab-search');
   if (searchInput) searchInput.value = '';
+
+  // ── Book state detection ──
+  const bookLoaded = isBookLoaded();
+  const bookId = getBookId();
+  const bookCb = panelEl.querySelector('.vocab-book-cb');
+  const statusEl = panelEl.querySelector('.vocab-scan-status');
+
+  // If the book changed (or was closed), invalidate the cached scan
+  if (bookId !== lastBookId) {
+    bookWordSet = null;
+    bookScanInProgress = false;
+    inBookOnly = false;
+    lastBookId = bookId;
+  }
+
+  // Sync the checkbox and status with current book state
+  if (!bookLoaded) {
+    inBookOnly = false;
+    bookCb.checked = false;
+    bookCb.disabled = true;
+    statusEl.textContent = 'No book open';
+  } else {
+    bookCb.disabled = false;
+    bookCb.checked = inBookOnly;
+    if (bookWordSet) {
+      statusEl.textContent = `${bookWordSet.size} unique`;
+    } else {
+      statusEl.textContent = '';
+    }
+  }
+
+  updateForgetBookBtn();
 
   // Load saved words from DB
   dbWords = await getAllWords(currentLanguage);
@@ -500,6 +601,17 @@ async function forgetBookWords() {
     syncAllReaderSpans();
     if (onStatsUpdate) onStatsUpdate();
   });
+}
+
+/**
+ * Reset book-related state. Call when the current book is closed
+ * so the next openPanel starts with a clean slate.
+ */
+export function resetBookState() {
+  bookWordSet = null;
+  bookScanInProgress = false;
+  lastBookId = null;
+  inBookOnly = false;
 }
 
 // ── Utilities ────────────────────────────────────────────────────────
