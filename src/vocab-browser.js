@@ -39,8 +39,9 @@
  *     User sees book words immediately without manual checkbox toggle.
  *   PRESERVES across re-opens of same book:
  *     bookWordSet (scan cache), activeFilter
- *   SYNCS from epub-reader:
- *     checkbox disabled/enabled, status text
+ *   RECEIVES from caller (main.js):
+ *     bookId — passed explicitly, not queried from epub-reader.
+ *     checkbox disabled/enabled, status text derived from bookId.
  *
  * closePanel():    Only hides the panel. All state preserved.
  * resetBookState(): Full wipe — call on book close.
@@ -75,7 +76,7 @@
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  */
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
-import { getAllBookWords, getIframeDocument, isBookLoaded, getBookId } from './epub-reader.js';
+import { getAllBookWords, getIframeDocument } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
@@ -255,8 +256,12 @@ function ensurePanel() {
  * - When a book IS loaded, auto-enables "In this book" mode and scans
  *   if needed, so the user sees book words immediately without having
  *   to discover and toggle a checkbox.
+ *
+ * Book state is passed explicitly by the caller (main.js) via the
+ * options.bookId parameter. This avoids cross-module state queries
+ * that are invisible to tests and hard to debug at runtime.
  */
-export async function openPanel(language, statsCallback) {
+export async function openPanel(language, { bookId = null, onStatsUpdate: statsCallback = null } = {}) {
   currentLanguage = language;
   onStatsUpdate = statsCallback || null;
   ensurePanel();
@@ -267,9 +272,10 @@ export async function openPanel(language, statsCallback) {
   const searchInput = panelEl.querySelector('.vocab-search');
   if (searchInput) searchInput.value = '';
 
-  // ── Book state detection ──
-  const bookLoaded = isBookLoaded();
-  const bookId = getBookId();
+  // ── Book state from caller ──
+  // bookId is passed explicitly by main.js, which KNOWS the book is loaded
+  // because it called loadEpub(). No cross-module state query needed.
+  const bookLoaded = bookId != null;
   const bookCb = panelEl.querySelector('.vocab-book-cb');
   const statusEl = panelEl.querySelector('.vocab-scan-status');
 
@@ -301,8 +307,6 @@ export async function openPanel(language, statsCallback) {
     }
   }
 
-  updateForgetBookBtn();
-
   // Load saved words from DB
   dbWords = await getAllWords(currentLanguage);
 
@@ -310,6 +314,9 @@ export async function openPanel(language, statsCallback) {
   if (inBookOnly && !bookWordSet && !bookScanInProgress) {
     await scanBook();
   }
+
+  // Update forget button AFTER scan (bookWordSet is now set)
+  updateForgetBookBtn();
 
   await rebuildDisplayWords();
 
@@ -348,11 +355,11 @@ export function isOpen() {
   return panelEl?.classList.contains('open') ?? false;
 }
 
-export function togglePanel(language, statsCallback) {
+export function togglePanel(language, options) {
   if (isOpen()) {
     closePanel();
   } else {
-    openPanel(language, statsCallback);
+    openPanel(language, options);
   }
 }
 

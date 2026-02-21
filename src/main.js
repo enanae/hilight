@@ -1,5 +1,5 @@
 import './style.css';
-import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
+import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage, getBookId } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
 import { popupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
@@ -28,6 +28,7 @@ const LANGUAGES = [
 
 let currentLanguage = localStorage.getItem('hilight-lang') || 'en';
 let defLanguage = localStorage.getItem('hilight-def-lang') || 'en';
+let currentBookId = null; // explicit book state — passed to vocab panel
 
 /** Initialize the app. */
 function init() {
@@ -234,7 +235,7 @@ function bindEvents() {
       case 'v':
       case 'V':
         if (!e.ctrlKey && !e.metaKey) {
-          toggleVocabPanel(currentLanguage, updateStats);
+          toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats });
         }
         break;
       case 'w':
@@ -260,7 +261,7 @@ function bindEvents() {
 
   // Vocab browser
   document.getElementById('btn-vocab').addEventListener('click', () => {
-    toggleVocabPanel(currentLanguage, updateStats);
+    toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats });
   });
 
   // Mark all words on page as known (with undo)
@@ -301,6 +302,11 @@ async function openBook(file) {
         document.getElementById('book-title').textContent = meta.title;
       },
     });
+
+    // Capture book identity immediately after successful load.
+    // This is the single source of truth for "is a book open?"
+    // and is passed explicitly to any module that needs to know.
+    currentBookId = getBookId();
 
     // Load TOC (with nested sub-items)
     const toc = await getToc();
@@ -368,6 +374,7 @@ function renderTocItems(items, depth) {
 }
 
 function closeBook() {
+  currentBookId = null;
   destroyEpub();
   closeVocabPanel();
   resetVocabBookState();

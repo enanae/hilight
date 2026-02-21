@@ -18,6 +18,7 @@ vi.mock('../src/epub-reader.js', () => ({
   getIframeDocument: vi.fn(() => null),
   destroyEpub: vi.fn(),
   setLanguage: vi.fn(async () => {}),
+  getBookId: vi.fn(() => 'test-book-id'),
 }));
 
 vi.mock('../src/vocab-store.js', () => ({
@@ -53,7 +54,7 @@ vi.mock('../src/style.css', () => ({}));
 
 // ── Import the mocked modules so we can inspect calls ───────────────────
 
-import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHref } from '../src/epub-reader.js';
+import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHref, getBookId } from '../src/epub-reader.js';
 import { getStats, exportVocab, importVocab } from '../src/vocab-store.js';
 import { saveDictSettings, loadDictSettings, getActiveProviderId } from '../src/dictionary.js';
 import { markAllKnown, restoreWordLevels } from '../src/highlighter.js';
@@ -613,6 +614,14 @@ describe('Vocab Panel', () => {
   it('toggles the vocab panel when btn-vocab is clicked', () => {
     document.getElementById('btn-vocab').click();
     expect(toggleVocabPanel).toHaveBeenCalled();
+  });
+
+  it('passes bookId and onStatsUpdate options to togglePanel', () => {
+    document.getElementById('btn-vocab').click();
+    const args = toggleVocabPanel.mock.calls[0];
+    expect(args[1]).toHaveProperty('bookId');
+    expect(args[1]).toHaveProperty('onStatsUpdate');
+    expect(typeof args[1].onStatsUpdate).toBe('function');
   });
 });
 
