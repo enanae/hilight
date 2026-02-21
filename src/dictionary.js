@@ -118,7 +118,9 @@ function parseFreeDictV2(data) {
   const defs = [];
   for (const m of meanings) {
     for (const d of (m.definitions || []).slice(0, 2)) {
-      defs.push({ partOfSpeech: m.partOfSpeech, definition: d.definition });
+      if (d.definition) {
+        defs.push({ partOfSpeech: m.partOfSpeech || '', definition: d.definition });
+      }
     }
   }
   if (defs.length === 0) return null;
