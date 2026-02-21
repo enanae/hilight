@@ -79,6 +79,9 @@ export async function highlightContainer(container, language, { onStatsUpdate } 
       frag.appendChild(span);
     }
 
+    // Guard: if a concurrent setLanguage() already replaced this text node,
+    // it will have been removed from the DOM (parentNode === null). Skip it.
+    if (!node.parentNode) continue;
     node.parentNode.replaceChild(frag, node);
   }
 
