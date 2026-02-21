@@ -11,10 +11,10 @@
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  *   All filters work: "?" shows words in the book you haven't learned yet.
  */
-import { getAllWords, setLevel, getLevels } from './vocab-store.js';
+import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
 import { getAllBookWords, getIframeDocument } from './epub-reader.js';
 import { stem } from './stemmer.js';
-import { LEVEL_UNKNOWN, LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
+import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
 const LEVEL_CLASSES = ['vb-unknown', 'vb-partial', 'vb-known'];
 const LEVEL_SYMBOLS = ['?', '~', '\u2713'];
@@ -29,6 +29,54 @@ let activeFilter = 'all'; // 'all' | 0 | 1 | 2
 let inBookOnly = false;
 let searchQuery = '';
 let onStatsUpdate = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const HL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
+
+/**
+ * Keep dbWords array in sync after a word level change.
+ * dbWords only holds level 1+2 entries (level 0 = not stored).
+ */
+function adjustDbEntry(word, level) {
+  const idx = dbWords.findIndex(w => w.word === word);
+  if (idx !== -1) {
+    if (level === 0) {
+      dbWords.splice(idx, 1);
+    } else {
+      dbWords[idx].level = level;
+    }
+  } else if (level !== 0) {
+    dbWords.push({ word, level });
+  }
+}
+
+/** Update a single word's spans in the reader iframe. */
+function syncReaderSpans(word, level) {
+  const iframeDoc = getIframeDocument();
+  if (!iframeDoc) return;
+  iframeDoc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(currentLanguage)}"]`)
+    .forEach(el => {
+      el.dataset.level = level;
+      el.className = `hl-word ${HL_CLASSES[level]}`;
+    });
+}
+
+/** Bulk-update all reader spans to reflect current dbWords state. */
+function syncAllReaderSpans() {
+  const iframeDoc = getIframeDocument();
+  if (!iframeDoc) return;
+  const levelMap = new Map();
+  for (const w of dbWords) levelMap.set(w.word, w.level);
+  iframeDoc.querySelectorAll(`.hl-word[data-language="${CSS.escape(currentLanguage)}"]`)
+    .forEach(el => {
+      const level = levelMap.get(el.dataset.word) || 0;
+      el.dataset.level = level;
+      el.className = `hl-word ${HL_CLASSES[level]}`;
+    });
+}
+
+// ── Panel DOM ────────────────────────────────────────────────────────
 
 /**
  * Create the panel DOM (once). Appended inside .main-area.
@@ -60,6 +108,10 @@ function ensurePanel() {
     </div>
     <div class="vocab-list"></div>
     <div class="vocab-summary"></div>
+    <div class="vocab-actions">
+      <button class="vocab-forget-btn" data-scope="book" disabled title="Forget saved words that appear in the current book">Forget in book</button>
+      <button class="vocab-forget-btn" data-scope="all" title="Forget all saved words for this language">Forget all</button>
+    </div>
   `;
 
   panelEl.querySelector('.vocab-close-btn').addEventListener('click', closePanel);
@@ -86,25 +138,25 @@ function ensurePanel() {
     if (inBookOnly && !bookWordSet && !bookScanInProgress) {
       await scanBook();
     }
+    updateForgetBookBtn();
     await rebuildDisplayWords();
     renderList();
   });
 
   panelEl.querySelector('.vocab-list').addEventListener('click', (e) => {
-    const header = e.target.closest('.vb-group-header');
-    if (header) {
-      // Don't toggle if they clicked a mark button inside the header
-      if (e.target.closest('.vb-group-mark')) return;
-      header.closest('.vb-group').classList.toggle('collapsed');
-      return;
-    }
-
+    // Check mark buttons BEFORE header — they're nested inside the header,
+    // so checking header first would swallow the click with an early return.
     const markBtn = e.target.closest('.vb-group-mark');
     if (markBtn) {
       const level = parseInt(markBtn.dataset.level, 10);
-      const group = markBtn.closest('.vb-group');
-      const stemKey = group.dataset.stem;
+      const stemKey = markBtn.closest('.vb-group').dataset.stem;
       markGroup(stemKey, level);
+      return;
+    }
+
+    const header = e.target.closest('.vb-group-header');
+    if (header) {
+      header.closest('.vb-group').classList.toggle('collapsed');
       return;
     }
 
@@ -112,6 +164,14 @@ function ensurePanel() {
     if (row) {
       cycleWord(row.dataset.word);
     }
+  });
+
+  panelEl.querySelector('.vocab-actions').addEventListener('click', (e) => {
+    const btn = e.target.closest('.vocab-forget-btn');
+    if (!btn || btn.disabled) return;
+    const scope = btn.dataset.scope;
+    if (scope === 'all') forgetAllWords();
+    if (scope === 'book') forgetBookWords();
   });
 
   document.querySelector('.main-area').appendChild(panelEl);
@@ -296,18 +356,7 @@ async function cycleWord(word) {
   const newLevel = (entry.level + 1) % 3;
   entry.level = newLevel;
   await setLevel(currentLanguage, word, newLevel);
-
-  // Keep dbWords in sync
-  const dbEntry = dbWords.find(w => w.word === word);
-  if (dbEntry) {
-    if (newLevel === 0) {
-      dbWords = dbWords.filter(w => w.word !== word);
-    } else {
-      dbEntry.level = newLevel;
-    }
-  } else if (newLevel !== 0) {
-    dbWords.push({ word, level: newLevel });
-  }
+  adjustDbEntry(word, newLevel);
 
   updateRowBadge(word, newLevel);
   syncReaderSpans(word, newLevel);
@@ -325,26 +374,12 @@ async function markGroup(stemKey, targetLevel) {
       previousState.push({ word: entry.word, level: entry.level });
       entry.level = targetLevel;
       updates.push(setLevel(currentLanguage, entry.word, targetLevel));
+      adjustDbEntry(entry.word, targetLevel);
       syncReaderSpans(entry.word, targetLevel);
-
-      // Keep dbWords in sync
-      const dbEntry = dbWords.find(w => w.word === entry.word);
-      if (dbEntry) {
-        if (targetLevel === 0) {
-          dbWords = dbWords.filter(w => w.word !== entry.word);
-        } else {
-          dbEntry.level = targetLevel;
-        }
-      } else if (targetLevel !== 0) {
-        dbWords.push({ word: entry.word, level: targetLevel });
-      }
     }
   }
   await Promise.all(updates);
-
-  // Re-render group rows in place
   updateGroupRows(stemKey);
-
   if (onStatsUpdate) onStatsUpdate();
 
   if (previousState.length > 0) {
@@ -354,19 +389,8 @@ async function markGroup(stemKey, targetLevel) {
         const entry = displayWords.find(e => e.word === word);
         if (entry) entry.level = level;
         restoreUpdates.push(setLevel(currentLanguage, word, level));
+        adjustDbEntry(word, level);
         syncReaderSpans(word, level);
-
-        // Keep dbWords in sync on undo
-        const dbEntry = dbWords.find(w => w.word === word);
-        if (dbEntry) {
-          if (level === 0) {
-            dbWords = dbWords.filter(w => w.word !== word);
-          } else {
-            dbEntry.level = level;
-          }
-        } else if (level !== 0) {
-          dbWords.push({ word, level });
-        }
       }
       await Promise.all(restoreUpdates);
       updateGroupRows(stemKey);
@@ -419,16 +443,66 @@ function updateRowBadge(word, level) {
   badge.textContent = LEVEL_SYMBOLS[level];
 }
 
-function syncReaderSpans(word, level) {
-  const iframeDoc = getIframeDocument();
-  if (!iframeDoc) return;
-  const HL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
-  iframeDoc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(currentLanguage)}"]`)
-    .forEach(el => {
-      el.dataset.level = level;
-      el.className = `hl-word ${HL_CLASSES[level]}`;
-    });
+function updateForgetBookBtn() {
+  const btn = panelEl?.querySelector('.vocab-forget-btn[data-scope="book"]');
+  if (btn) btn.disabled = !(inBookOnly && bookWordSet);
 }
+
+// ── Forget operations ────────────────────────────────────────────────
+
+/**
+ * Forget all saved words for the current language.
+ * Deletes from IndexedDB, resets panel state, updates reader.
+ */
+async function forgetAllWords() {
+  const deleted = await deleteAllWords(currentLanguage);
+  if (deleted.length === 0) return;
+
+  dbWords = [];
+  await rebuildDisplayWords();
+  renderList();
+  syncAllReaderSpans();
+  if (onStatsUpdate) onStatsUpdate();
+
+  showUndoToast(`Forgot ${deleted.length} words`, async () => {
+    await importVocab(deleted);
+    dbWords = deleted.map(e => ({ word: e.word, level: e.level }));
+    await rebuildDisplayWords();
+    renderList();
+    syncAllReaderSpans();
+    if (onStatsUpdate) onStatsUpdate();
+  });
+}
+
+/**
+ * Forget saved words that appear in the current book.
+ * Only available when "In this book" is enabled and bookWordSet exists.
+ */
+async function forgetBookWords() {
+  if (!bookWordSet) return;
+  const bookWordsArray = [...bookWordSet];
+  const deleted = await deleteWordsList(currentLanguage, bookWordsArray);
+  if (deleted.length === 0) return;
+
+  // Remove deleted words from dbWords
+  const deletedSet = new Set(deleted.map(e => e.word));
+  dbWords = dbWords.filter(w => !deletedSet.has(w.word));
+  await rebuildDisplayWords();
+  renderList();
+  syncAllReaderSpans();
+  if (onStatsUpdate) onStatsUpdate();
+
+  showUndoToast(`Forgot ${deleted.length} words in book`, async () => {
+    await importVocab(deleted);
+    for (const e of deleted) dbWords.push({ word: e.word, level: e.level });
+    await rebuildDisplayWords();
+    renderList();
+    syncAllReaderSpans();
+    if (onStatsUpdate) onStatsUpdate();
+  });
+}
+
+// ── Utilities ────────────────────────────────────────────────────────
 
 function esc(str) {
   const el = document.createElement('span');

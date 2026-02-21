@@ -1,9 +1,9 @@
 import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
-import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices, PROVIDERS } from './dictionary.js';
+import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
 import { popupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
-import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, isOpen as isVocabOpen } from './vocab-browser.js';
+import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel } from './vocab-browser.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -350,11 +350,10 @@ function showUndoToast(message, onUndo) {
     onUndo();
   });
   document.getElementById('app').appendChild(toast);
-  const timer = setTimeout(() => {
+  setTimeout(() => {
     dismissed = true;
     toast.remove();
   }, 6000);
-  // If user clicks undo, the timeout's remove() is harmless (already removed)
 }
 
 function renderTocItems(items, depth) {

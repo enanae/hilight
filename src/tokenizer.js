@@ -59,6 +59,16 @@ function tokenizeFallback(text) {
   return segments;
 }
 
+/** Map a two-letter language code to a locale string. */
+export function langToLocale(lang) {
+  const map = {
+    en: 'en', es: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt',
+    ko: 'ko', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', hi: 'hi',
+    th: 'th', vi: 'vi', tr: 'tr', pl: 'pl', nl: 'nl', sv: 'sv',
+  };
+  return map[lang] || lang;
+}
+
 /**
  * Normalize a word for storage: NFC normalize, locale-aware lowercase, trim.
  * NFC normalization ensures that e.g. é (composed) matches é (decomposed).

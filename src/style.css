@@ -661,6 +661,38 @@ html, body {
   flex-shrink: 0;
 }
 
+.vocab-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.vocab-forget-btn {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.vocab-forget-btn:hover:not(:disabled) {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.vocab-forget-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* Empty state */
 .vb-empty {
   padding: 32px 20px;

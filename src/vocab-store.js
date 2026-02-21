@@ -86,17 +86,6 @@ export async function getLevels(language, words) {
   return map;
 }
 
-/** Get all words for a language at a given level. */
-export async function getWordsByLevel(language, level) {
-  const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const idx = store.index('by_level');
-    const req = idx.getAll([language, level]);
-    req.onsuccess = () => resolve(req.result.map(r => r.word));
-    req.onerror = () => reject(req.error);
-  });
-}
-
 /** Get vocabulary stats for a language. */
 export async function getStats(language) {
   const store = await tx('readonly');
@@ -124,6 +113,59 @@ export async function getAllWords(language) {
     req.onsuccess = () => resolve(req.result.map(r => ({ word: r.word, level: r.level })));
     req.onerror = () => reject(req.error);
   });
+}
+
+/**
+ * Delete all stored words for a language.
+ * Returns the deleted entries for undo: [{language, word, level}, ...]
+ */
+export async function deleteAllWords(language) {
+  const store = await tx('readonly');
+  const entries = await new Promise((resolve, reject) => {
+    const idx = store.index('by_language');
+    const req = idx.getAll(language);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  if (entries.length === 0) return [];
+  const writeStore = await tx('readwrite');
+  await Promise.all(entries.map(e =>
+    new Promise((resolve, reject) => {
+      const req = writeStore.delete([e.language, e.word]);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    })
+  ));
+  return entries.map(e => ({ language: e.language, word: e.word, level: e.level }));
+}
+
+/**
+ * Delete a specific list of words for a language.
+ * Returns the deleted entries that actually existed for undo.
+ */
+export async function deleteWordsList(language, words) {
+  const store = await tx('readonly');
+  const deleted = [];
+  await Promise.all(words.map(w =>
+    new Promise((resolve, reject) => {
+      const req = store.get([language, w]);
+      req.onsuccess = () => {
+        if (req.result) deleted.push({ language, word: w, level: req.result.level });
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    })
+  ));
+  if (deleted.length === 0) return [];
+  const writeStore = await tx('readwrite');
+  await Promise.all(deleted.map(e =>
+    new Promise((resolve, reject) => {
+      const req = writeStore.delete([e.language, e.word]);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    })
+  ));
+  return deleted;
 }
 
 /** Export all vocab for a language as JSON array. */
