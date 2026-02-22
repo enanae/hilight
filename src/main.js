@@ -2,9 +2,10 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
-import { isPopupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
+import { isPopupActive, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 import { state } from './app-state.js';
+import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
 import { escapeHtml, showUndoToast, showError } from './ui-utils.js';
 
 const LANGUAGES = [
@@ -60,8 +61,8 @@ function renderApp() {
           </select>
         </label>
         <button id="btn-settings" class="icon-btn" title="Dictionary settings" aria-label="Dictionary settings">&#9881;</button>
-        <button id="btn-export" class="icon-btn" title="Export vocabulary as JSON" aria-label="Export vocabulary">&#8681;</button>
-        <button id="btn-import" class="icon-btn" title="Import vocabulary from JSON" aria-label="Import vocabulary">&#8679;</button>
+        <button id="btn-export" class="icon-btn" title="Export vocabulary as JSON" aria-label="Export vocabulary">&#128190;</button>
+        <button id="btn-import" class="icon-btn" title="Import vocabulary from JSON" aria-label="Import vocabulary">&#128194;</button>
       </div>
     </header>
 
@@ -99,12 +100,22 @@ function renderApp() {
           <span id="book-title" class="book-title"></span>
           <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> Page known</span></button>
           <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label"> Vocab</span></button>
+          <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label"> Open</span></button>
           <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close book</span></button>
         </div>
         <div class="reader-nav">
           <button id="btn-prev" class="nav-btn" title="Previous">&lsaquo;</button>
           <div id="epub-viewer" class="epub-viewer"></div>
           <button id="btn-next" class="nav-btn" title="Next">&rsaquo;</button>
+        </div>
+        <div id="review-bar" class="review-bar">
+          <span class="review-bar-label">REVIEW</span>
+          <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
+          <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
+          <span class="review-bar-keys"><kbd>d</kbd> define</span>
+          <span class="review-bar-keys"><kbd>Space</kbd> next</span>
+          <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
+          <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
         </div>
       </div>
 
@@ -148,6 +159,52 @@ function renderApp() {
             <button id="btn-save-dict" class="btn-primary">Save</button>
             <button id="btn-reset-dict" class="btn-secondary">Reset to default</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help modal -->
+    <div id="help-modal" class="modal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content help-content">
+        <div class="modal-header">
+          <h2>Keyboard Shortcuts</h2>
+          <button id="btn-close-help" class="toolbar-btn">&#10005;</button>
+        </div>
+        <div class="modal-body">
+          <div class="help-columns">
+            <div class="help-section">
+              <h3>Reading</h3>
+              <dl class="help-keys">
+                <dt>&#8592; &#8594;</dt><dd>Previous / next page</dd>
+                <dt>Space</dt><dd>Next page</dd>
+                <dt>Shift+Space</dt><dd>Previous page</dd>
+                <dt>Tab / Enter</dt><dd>Enter review mode</dd>
+              </dl>
+            </div>
+            <div class="help-section">
+              <h3>Review Mode</h3>
+              <dl class="help-keys">
+                <dt>n / N</dt><dd>Next / previous word</dd>
+                <dt>1 / 2 / 3</dt><dd>Unknown / partial / known</dd>
+                <dt>d / Enter</dt><dd>Show definition</dd>
+                <dt>Space</dt><dd>Apply last grade + next</dd>
+                <dt>a</dt><dd>Toggle all / unlearned</dd>
+                <dt>Esc</dt><dd>Exit review mode</dd>
+              </dl>
+            </div>
+            <div class="help-section">
+              <h3>General</h3>
+              <dl class="help-keys">
+                <dt>T</dt><dd>Table of contents</dd>
+                <dt>K</dt><dd>Mark page as known</dd>
+                <dt>V</dt><dd>Vocabulary panel</dd>
+                <dt>W</dt><dd>Close book</dd>
+                <dt>?</dt><dd>This help</dd>
+              </dl>
+            </div>
+          </div>
+          <p class="help-hint">Click a word to cycle its level. Long-press (hold) or double-click for definition.</p>
         </div>
       </div>
     </div>
@@ -214,11 +271,95 @@ function bindEvents() {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
+    // --- Help modal open? Only Escape and ? should work ---
+    if (document.getElementById('help-modal').classList.contains('open')) {
+      if (e.key === 'Escape' || e.key === '?') closeHelp();
+      return;
+    }
+
+    // --- Review mode active ---
+    if (isReviewMode()) {
+      const iframeDoc = getIframeDocument();
+      switch (e.key) {
+        case 'n': {
+          const result = focusNextWord(iframeDoc);
+          if (result === 'end') {
+            state.reviewPendingResume = true;
+            await nextPage();
+          }
+          break;
+        }
+        case 'N': {
+          const result = focusPrevWord(iframeDoc);
+          if (result === 'start') {
+            state.reviewPendingResume = true;
+            await prevPage();
+          }
+          break;
+        }
+        case 'Tab':
+          e.preventDefault();
+          if (e.shiftKey) {
+            const result = focusPrevWord(iframeDoc);
+            if (result === 'start') { state.reviewPendingResume = true; await prevPage(); }
+          } else {
+            const result = focusNextWord(iframeDoc);
+            if (result === 'end') { state.reviewPendingResume = true; await nextPage(); }
+          }
+          break;
+        case '1': await gradeAndUpdate(0); break;
+        case '2': await gradeAndUpdate(1); break;
+        case '3': await gradeAndUpdate(2); break;
+        case 'd':
+        case 'Enter':
+          showDefForFocused();
+          break;
+        case ' ':
+          e.preventDefault();
+          await quickAdvance();
+          break;
+        case 'a':
+          toggleFilter(iframeDoc);
+          updateReviewBarFilter();
+          break;
+        case 'Escape':
+          exitReviewMode();
+          hideReviewBar();
+          break;
+        case 'ArrowLeft':
+          exitReviewMode();
+          hideReviewBar();
+          prevPage();
+          break;
+        case 'ArrowRight':
+          exitReviewMode();
+          hideReviewBar();
+          nextPage();
+          break;
+        default: return; // don't preventDefault for unhandled keys
+      }
+      return;
+    }
+
+    // --- Reading mode ---
     switch (e.key) {
       case 'ArrowLeft': prevPage(); break;
       case 'ArrowRight': nextPage(); break;
+      case ' ':
+        e.preventDefault();
+        if (e.shiftKey) prevPage(); else nextPage();
+        break;
+      case 'Tab':
+      case 'Enter':
+        if (getIframeDocument()) {
+          e.preventDefault();
+          enterReviewMode(getIframeDocument());
+          showReviewBar();
+        }
+        break;
       case 'Escape':
         closeSettings();
+        closeHelp();
         closeVocabPanel();
         document.getElementById('toc-panel').classList.remove('open');
         break;
@@ -243,6 +384,9 @@ function bindEvents() {
         if (!e.ctrlKey && !e.metaKey) {
           if (document.getElementById('reader-area')?.classList.contains('open')) closeBook();
         }
+        break;
+      case '?':
+        toggleHelp();
         break;
     }
   }));
@@ -278,6 +422,16 @@ function bindEvents() {
   document.getElementById('btn-save-dict').addEventListener('click', safeHandler(saveDict));
   document.getElementById('btn-reset-dict').addEventListener('click', safeHandler(resetDict));
   document.getElementById('dict-provider').addEventListener('change', safeHandler(onProviderChange));
+
+  // Open book (from reader toolbar)
+  document.getElementById('btn-open-book').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+
+  // Help modal
+  document.getElementById('btn-close-help').addEventListener('click', safeHandler(closeHelp));
+  document.querySelector('#help-modal .modal-backdrop').addEventListener('click', safeHandler(closeHelp));
+  document.querySelector('#help-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
 
   // Export / Import
   document.getElementById('btn-export').addEventListener('click', safeHandler(doExport));
@@ -353,6 +507,7 @@ function renderTocItems(items, depth) {
 function closeBook() {
   state.currentBookId = null;
   // Cleanup may throw (e.g. partial init) — catch each so UI reset ALWAYS runs
+  try { exitReviewMode(); hideReviewBar(); } catch (_) { /* ignore */ }
   try { destroyEpub(); } catch (err) { console.error('[hilight] destroyEpub failed:', err); }
   try { closeVocabPanel(); } catch (err) { console.error('[hilight] closeVocabPanel failed:', err); }
   try { resetVocabBookState(); } catch (err) { console.error('[hilight] resetVocabBookState failed:', err); }
@@ -456,6 +611,59 @@ function resetDict() {
   document.getElementById('dict-provider').value = defaultId;
   document.getElementById('dict-url').value = '';
   toggleCustomFields(false);
+}
+
+// --- Review mode helpers ---
+
+async function gradeAndUpdate(level) {
+  const span = getFocusedWord();
+  if (!span) return;
+  await setWordLevel(span, level, updateStats);
+  state.reviewLastGrade = level;
+}
+
+async function quickAdvance() {
+  if (state.reviewLastGrade !== null) {
+    await gradeAndUpdate(state.reviewLastGrade);
+  }
+  const iframeDoc = getIframeDocument();
+  const result = focusNextWord(iframeDoc);
+  if (result === 'end') {
+    state.reviewPendingResume = true;
+    await nextPage();
+  }
+}
+
+function showDefForFocused() {
+  const span = getFocusedWord();
+  if (span) showWordDefinition(span);
+}
+
+function showReviewBar() {
+  const bar = document.getElementById('review-bar');
+  if (bar) bar.classList.add('visible');
+  updateReviewBarFilter();
+}
+
+function hideReviewBar() {
+  const bar = document.getElementById('review-bar');
+  if (bar) bar.classList.remove('visible');
+}
+
+function updateReviewBarFilter() {
+  const el = document.getElementById('review-bar-filter');
+  if (el) el.innerHTML = `<kbd>a</kbd> ${isShowingAll() ? 'unlearned' : 'all'}`;
+}
+
+// --- Help modal ---
+
+function toggleHelp() {
+  const modal = document.getElementById('help-modal');
+  modal.classList.toggle('open');
+}
+
+function closeHelp() {
+  document.getElementById('help-modal').classList.remove('open');
 }
 
 async function doExport() {

@@ -141,13 +141,19 @@ export async function restoreWordLevels(doc, previousState) {
  * Called from epub-reader.js via rendition events.
  */
 export async function handleWordTap(span, onStatsUpdate) {
+  const level = (parseInt(span.dataset.level, 10) + 1) % 3;
+  await setWordLevel(span, level, onStatsUpdate);
+}
+
+/**
+ * Set a specific knowledge level on a word span.
+ * Updates the DB and ALL matching spans in the document.
+ * Used by review mode (direct grading) and handleWordTap (cycling).
+ */
+export async function setWordLevel(span, level, onStatsUpdate) {
   const doc = span.ownerDocument;
   const word = span.dataset.word;
   const language = span.dataset.language;
-  let level = parseInt(span.dataset.level, 10);
-
-  // Cycle: unknown(0) -> partial(1) -> known(2) -> unknown(0)
-  level = (level + 1) % 3;
 
   await setLevel(language, word, level);
 
