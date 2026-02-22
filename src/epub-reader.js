@@ -178,7 +178,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
 
   rendition.on('touchend', (e) => {
     clearTimeout(longPressTimer);
-    if (popupActive || longPressFired) return;
+    if (isPopupActive() || longPressFired) return;
 
     if (!e.changedTouches || !e.changedTouches[0]) return;
     const span = findWordSpan(e.target);

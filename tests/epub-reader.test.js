@@ -164,7 +164,7 @@ import {
   getAllBookWords,
 } from '../src/epub-reader.js';
 
-import { highlightContainer, resetPopupState, isPopupActive } from '../src/highlighter.js';
+import { highlightContainer, resetPopupState, isPopupActive, handleWordTap } from '../src/highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from '../src/tokenizer.js';
 import ePub from 'epubjs';
 
@@ -810,5 +810,61 @@ describe('loadEpub', () => {
     expect(onCalls).toContain('touchend');
     expect(onCalls).toContain('click');
     expect(onCalls).toContain('dblclick');
+  });
+
+  it('click handler calls handleWordTap for a hl-word span', async () => {
+    const onStats = vi.fn();
+    const viewer = document.createElement('div');
+    const { rendition } = await loadEpub(new ArrayBuffer(8), viewer, 'en', { onStatsUpdate: onStats });
+
+    // Find the registered click handler
+    const clickHandler = rendition.on.mock.calls.find(c => c[0] === 'click')[1];
+    const span = document.createElement('span');
+    span.className = 'hl-word hl-unknown';
+    span.dataset.word = 'hello';
+    span.dataset.language = 'en';
+    span.dataset.level = '0';
+
+    clickHandler({ target: span });
+    expect(handleWordTap).toHaveBeenCalledWith(span, onStats);
+  });
+
+  it('click handler is suppressed when isPopupActive returns true', async () => {
+    const viewer = document.createElement('div');
+    const { rendition } = await loadEpub(new ArrayBuffer(8), viewer, 'en');
+
+    const clickHandler = rendition.on.mock.calls.find(c => c[0] === 'click')[1];
+    const span = document.createElement('span');
+    span.className = 'hl-word hl-unknown';
+    span.dataset.word = 'hello';
+
+    isPopupActive.mockReturnValue(true);
+    clickHandler({ target: span });
+    expect(handleWordTap).not.toHaveBeenCalled();
+    isPopupActive.mockReturnValue(false);
+  });
+
+  it('touchend handler does not throw when isPopupActive is called', async () => {
+    const viewer = document.createElement('div');
+    const { rendition } = await loadEpub(new ArrayBuffer(8), viewer, 'en');
+
+    // Find the registered touchend handler
+    const touchendHandler = rendition.on.mock.calls.find(c => c[0] === 'touchend')[1];
+    // Also fire touchstart first to set up the state
+    const touchstartHandler = rendition.on.mock.calls.find(c => c[0] === 'touchstart')[1];
+
+    const span = document.createElement('span');
+    span.className = 'hl-word hl-unknown';
+    span.dataset.word = 'hello';
+    span.dataset.language = 'en';
+    span.dataset.level = '0';
+
+    // Simulate touchstart
+    touchstartHandler({ touches: [{ clientX: 100, clientY: 100 }] });
+
+    // touchend should not throw — this would catch the missing isPopupActive() call
+    expect(() => {
+      touchendHandler({ changedTouches: [{ clientX: 100, clientY: 100, target: span }] });
+    }).not.toThrow();
   });
 });
