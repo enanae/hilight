@@ -239,9 +239,9 @@ describe('Stats Display', () => {
     langSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     await vi.waitFor(() => {
-      expect(document.getElementById('stat-unknown').textContent).toBe('? 3');
-      expect(document.getElementById('stat-partial').textContent).toBe('~ 1');
-      expect(document.getElementById('stat-known').textContent).toBe('\u2713 2');
+      expect(document.getElementById('stat-unknown').textContent).toBe('? 3 unknown');
+      expect(document.getElementById('stat-partial').textContent).toBe('~ 1 learning');
+      expect(document.getElementById('stat-known').textContent).toBe('\u2713 2 known');
       expect(document.getElementById('stat-saved').textContent).toContain('15 saved');
     });
   });
@@ -255,9 +255,9 @@ describe('Stats Display', () => {
     langSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
     await vi.waitFor(() => {
-      expect(document.getElementById('stat-unknown').textContent).toBe('? 0');
-      expect(document.getElementById('stat-partial').textContent).toBe('~ 0');
-      expect(document.getElementById('stat-known').textContent).toBe('\u2713 0');
+      expect(document.getElementById('stat-unknown').textContent).toBe('? 0 unknown');
+      expect(document.getElementById('stat-partial').textContent).toBe('~ 0 learning');
+      expect(document.getElementById('stat-known').textContent).toBe('\u2713 0 known');
     });
   });
 });
@@ -639,7 +639,7 @@ describe('Upload Area', () => {
 
   it('contains upload instructions and a link to Project Gutenberg', () => {
     const uploadArea = document.getElementById('upload-area');
-    expect(uploadArea.textContent).toContain('Drop an epub file here');
+    expect(uploadArea.textContent).toContain('Open an epub file');
     const gutenbergLink = uploadArea.querySelector('a[href*="gutenberg.org"]');
     expect(gutenbergLink).not.toBeNull();
   });

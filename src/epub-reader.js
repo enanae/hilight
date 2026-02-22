@@ -591,12 +591,34 @@ function injectStyles(doc) {
       border: 1px solid #2a2a3a;
       border-radius: 8px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(168,85,247,0.1);
-      padding: 12px 16px;
-      max-width: 340px;
+      padding: 12px 30px 12px 16px;
+      max-width: min(340px, calc(100vw - 20px));
       min-width: 200px;
+      position: relative;
       font-size: 14px;
       line-height: 1.5;
       font-family: system-ui, sans-serif;
+      color: #e0dfe6;
+    }
+    .hl-popup-close {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #6b6a7a;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .hl-popup-close:hover {
+      background: rgba(255,255,255,0.1);
       color: #e0dfe6;
     }
     .hl-popup-word {

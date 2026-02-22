@@ -187,7 +187,7 @@ async function showDefinition(anchor, language, word) {
 
   const popup = doc.createElement('div');
   popup.className = 'hl-popup';
-  popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
+  popup.innerHTML = '<button class="hl-popup-close" aria-label="Close">\u2715</button><div class="hl-popup-loading">Looking up...</div>';
 
   state.popupActive = true;
 
@@ -228,16 +228,22 @@ async function showDefinition(anchor, language, word) {
   // (which check state.popupActive) ignore this same event cycle.
   const showTime = Date.now();
   const DISMISS_GUARD_MS = 400;
-  const dismiss = (e) => {
-    if (Date.now() - showTime < DISMISS_GUARD_MS) return;
-    // If the tap is inside the popup itself, ignore it (allow link clicks etc.)
-    if (popup.contains(e.target)) return;
+  const closePopup = () => {
     popup.remove();
     doc.removeEventListener('click', dismiss, true);
     doc.removeEventListener('touchstart', dismiss, true);
-    // Defer state.popupActive reset so that word-tap handlers still see
-    // state.popupActive=true for this event and ignore it.
     setTimeout(() => { state.popupActive = false; }, 0);
+  };
+  const dismiss = (e) => {
+    if (Date.now() - showTime < DISMISS_GUARD_MS) return;
+    // Close button always works
+    if (e.target.closest('.hl-popup-close')) {
+      closePopup();
+      return;
+    }
+    // If the tap is inside the popup itself, ignore it (allow link clicks etc.)
+    if (popup.contains(e.target)) return;
+    closePopup();
   };
   doc.addEventListener('click', dismiss, true);
   doc.addEventListener('touchstart', dismiss, true);
