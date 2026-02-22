@@ -1240,6 +1240,18 @@ html, body {
     display: none;
   }
 
+  /* Reading hint shows keyboard shortcuts — useless on touch devices */
+  .reading-hint {
+    display: none !important;
+  }
+
+  /* Hide low-frequency actions on mobile toolbar; accessible via exit focus → full UI */
+  .book-title,
+  .btn-close-book,
+  #btn-open-book {
+    display: none;
+  }
+
   /* Undo toast: avoid overlap with phone gesture bars */
   .undo-toast, .error-toast {
     bottom: 40px;
