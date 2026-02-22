@@ -212,16 +212,25 @@ describe('Panel lifecycle', () => {
 
   it('togglePanel opens when closed', async () => {
     expect(isOpen()).toBe(false);
-    togglePanel('en');
-    await flush();
+    await togglePanel('en');
     expect(isOpen()).toBe(true);
   });
 
   it('togglePanel closes when open', async () => {
     await openPanel('en');
     expect(isOpen()).toBe(true);
-    togglePanel('en');
+    await togglePanel('en');
     expect(isOpen()).toBe(false);
+  });
+
+  it('togglePanel ignores concurrent open attempts', async () => {
+    expect(isOpen()).toBe(false);
+    const p1 = togglePanel('en');
+    const p2 = togglePanel('en');
+    await Promise.all([p1, p2]);
+    expect(isOpen()).toBe(true);
+    // Only one openPanel call should have run
+    expect(getAllWords).toHaveBeenCalledTimes(1);
   });
 
   it('close button click closes the panel', async () => {
@@ -340,7 +349,7 @@ describe('Filtering by level', () => {
     clickFilter('0');
     const empty = vocabList().querySelector('.vb-empty');
     expect(empty).not.toBeNull();
-    expect(empty.textContent).toContain('In this book');
+    expect(empty.textContent).toContain('book scan');
   });
 
   it('clicking a filter button marks it as active and deactivates others', () => {
@@ -1086,6 +1095,50 @@ describe('In-book mode', () => {
 
     const statusEl = panel().querySelector('.vocab-scan-status');
     expect(statusEl.textContent).toBe('3 unique');
+  });
+
+  it('falls back to DB words when scan returns empty Set', async () => {
+    getAllBookWords.mockResolvedValueOnce(new Set());
+    getAllWords.mockResolvedValueOnce([
+      { word: 'saved', level: 1 },
+    ]);
+    await openPanel('en', { bookId: 'book-empty-scan' });
+
+    // Scan returned empty → bookWordSet set to null → falls back to DB words
+    const rows = wordRows();
+    expect(rows.length).toBe(1);
+    expect(rows[0].dataset.word).toBe('saved');
+  });
+
+  it('falls back to DB words when scan returns null', async () => {
+    getAllBookWords.mockResolvedValueOnce(null);
+    getAllWords.mockResolvedValueOnce([
+      { word: 'known', level: 2 },
+    ]);
+    await openPanel('en', { bookId: 'book-null-scan' });
+
+    // Scan returned null → falls back to DB words
+    const rows = wordRows();
+    expect(rows.length).toBe(1);
+    expect(rows[0].dataset.word).toBe('known');
+  });
+
+  it('shows status text when scan returns empty', async () => {
+    getAllBookWords.mockResolvedValueOnce(new Set());
+    getAllWords.mockResolvedValueOnce([]);
+    await openPanel('en', { bookId: 'book-empty-status' });
+
+    const statusEl = panel().querySelector('.vocab-scan-status');
+    expect(statusEl.textContent).toBe('Scan found no words');
+  });
+
+  it('forget-in-book button stays disabled when scan returned empty', async () => {
+    getAllBookWords.mockResolvedValueOnce(new Set());
+    getAllWords.mockResolvedValueOnce([{ word: 'cat', level: 1 }]);
+    await openPanel('en', { bookId: 'book-forget-empty' });
+
+    const btn = panel().querySelector('.vocab-forget-btn[data-scope="book"]');
+    expect(btn.disabled).toBe(true);
   });
 });
 

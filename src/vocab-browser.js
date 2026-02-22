@@ -311,11 +311,20 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
   }
 
   // Load saved words from DB
-  dbWords = await getAllWords(currentLanguage);
+  try {
+    dbWords = await getAllWords(currentLanguage);
+  } catch (err) {
+    console.error('[vocab] getAllWords failed:', err);
+    dbWords = [];
+  }
 
   // If book mode is active but we haven't scanned yet, scan now
   if (inBookOnly && !bookWordSet && !bookScanInProgress) {
-    await scanBook();
+    try {
+      await scanBook();
+    } catch (err) {
+      console.error('[vocab] scanBook failed:', err);
+    }
   }
 
   // Update forget button AFTER scan (bookWordSet is now set)
@@ -331,21 +340,22 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
  * Build the displayWords array based on current mode.
  *
  * DB-only mode: displayWords = dbWords (level 1 + 2 only).
- * In-book mode: displayWords = every word in the book, with DB levels.
+ * In-book mode with successful scan: displayWords = every word in the book, with DB levels.
+ * In-book mode with failed/empty scan: falls back to dbWords so saved words are still visible.
  */
 async function rebuildDisplayWords() {
-  if (inBookOnly && bookWordSet) {
+  if (inBookOnly && bookWordSet && bookWordSet.size > 0) {
     // Build a level map from DB words for fast lookup
     const levelMap = new Map();
     for (const w of dbWords) levelMap.set(w.word, w.level);
 
-    // Also bulk-lookup any book words not in dbWords (they'll be level 0)
-    // dbWords only has level 1+2, so all level 0 words need no lookup — they default to 0
+    // Show every book word with its DB level (default 0 = unknown)
     displayWords = [];
     for (const word of bookWordSet) {
       displayWords.push({ word, level: levelMap.get(word) || 0 });
     }
   } else {
+    // DB-only mode, or scan failed/empty — show saved words so user isn't blocked
     displayWords = [...dbWords];
   }
 }
@@ -358,11 +368,19 @@ export function isOpen() {
   return panelEl?.classList.contains('open') ?? false;
 }
 
-export function togglePanel(language, options) {
+let openInProgress = false;
+
+export async function togglePanel(language, options) {
   if (isOpen()) {
     closePanel();
   } else {
-    openPanel(language, options);
+    if (openInProgress) return;
+    openInProgress = true;
+    try {
+      await openPanel(language, options);
+    } finally {
+      openInProgress = false;
+    }
   }
 }
 
@@ -374,12 +392,22 @@ async function scanBook() {
   const statusEl = panelEl.querySelector('.vocab-scan-status');
   statusEl.textContent = 'Scanning\u2026';
 
-  bookWordSet = await getAllBookWords((frac) => {
+  const result = await getAllBookWords((frac) => {
     statusEl.textContent = `${Math.round(frac * 100)}%`;
   });
 
   bookScanInProgress = false;
-  statusEl.textContent = bookWordSet ? `${bookWordSet.size} unique` : '';
+
+  if (result && result.size > 0) {
+    bookWordSet = result;
+    statusEl.textContent = `${bookWordSet.size} unique`;
+  } else {
+    // Scan failed or found no words — keep bookWordSet null so
+    // rebuildDisplayWords falls back to DB words instead of showing empty.
+    bookWordSet = null;
+    statusEl.textContent = result === null ? '' : 'Scan found no words';
+    console.warn('[vocab] scan returned', result === null ? 'null' : `empty (${result.size})`, '— falling back to saved words');
+  }
 }
 
 /**
@@ -403,12 +431,10 @@ function renderList() {
   // 3. Empty state
   if (filtered.length === 0) {
     let msg;
-    if (displayWords.length === 0 && !inBookOnly) {
+    if (displayWords.length === 0) {
       msg = 'No vocabulary saved yet.<br>Tap words while reading to build your list.';
-    } else if (displayWords.length === 0 && inBookOnly) {
-      msg = 'No book is open, or the scan found no words.';
-    } else if (activeFilter === 0 && !inBookOnly) {
-      msg = 'Unknown words are only visible with<br><strong>"In this book"</strong> enabled.';
+    } else if (activeFilter === 0 && !(bookWordSet && bookWordSet.size > 0)) {
+      msg = 'Unknown words are only visible when the<br>book scan completes successfully.';
     } else {
       msg = 'No words match the current filters.';
     }
@@ -571,7 +597,7 @@ function updateRowBadge(word, level) {
 
 function updateForgetBookBtn() {
   const btn = panelEl?.querySelector('.vocab-forget-btn[data-scope="book"]');
-  if (btn) btn.disabled = !(inBookOnly && bookWordSet);
+  if (btn) btn.disabled = !(inBookOnly && bookWordSet && bookWordSet.size > 0);
 }
 
 // ── Forget operations ────────────────────────────────────────────────
