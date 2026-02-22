@@ -1143,6 +1143,42 @@ html, body {
   background: var(--text-muted);
 }
 
+/* === Focus Mode === */
+#app.focus-mode .app-header,
+#app.focus-mode .stats-bar,
+#app.focus-mode .reader-toolbar,
+#app.focus-mode .reading-hint {
+  display: none;
+}
+
+.focus-exit-btn {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+}
+
+#app.focus-mode .focus-exit-btn {
+  display: block;
+}
+
+.focus-exit-btn:hover {
+  opacity: 1;
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* === Responsive === */
 @media (max-width: 600px) {
   .app-header {
