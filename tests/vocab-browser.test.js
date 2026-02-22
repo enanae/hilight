@@ -1097,30 +1097,56 @@ describe('In-book mode', () => {
     expect(statusEl.textContent).toBe('3 unique');
   });
 
-  it('falls back to DB words when scan returns empty Set', async () => {
+  it('shows empty when scan returns empty Set with inBookOnly (no cross-book leakage)', async () => {
     getAllBookWords.mockResolvedValueOnce(new Set());
     getAllWords.mockResolvedValueOnce([
       { word: 'saved', level: 1 },
     ]);
     await openPanel('en', { bookId: 'book-empty-scan' });
 
-    // Scan returned empty → bookWordSet set to null → falls back to DB words
+    // Scan returned empty → inBookOnly is true → displayWords should be EMPTY
+    // (not cross-book dbWords). The empty state message tells user to uncheck.
     const rows = wordRows();
-    expect(rows.length).toBe(1);
-    expect(rows[0].dataset.word).toBe('saved');
+    expect(rows.length).toBe(0);
+    const emptyMsg = panel().querySelector('.vb-empty');
+    expect(emptyMsg).not.toBeNull();
+    expect(emptyMsg.textContent).toContain('Uncheck');
   });
 
-  it('falls back to DB words when scan returns null', async () => {
+  it('shows empty when scan returns null with inBookOnly (no cross-book leakage)', async () => {
     getAllBookWords.mockResolvedValueOnce(null);
     getAllWords.mockResolvedValueOnce([
       { word: 'known', level: 2 },
     ]);
     await openPanel('en', { bookId: 'book-null-scan' });
 
-    // Scan returned null → falls back to DB words
+    // Scan returned null → inBookOnly is true → displayWords should be EMPTY
     const rows = wordRows();
-    expect(rows.length).toBe(1);
-    expect(rows[0].dataset.word).toBe('known');
+    expect(rows.length).toBe(0);
+    const emptyMsg = panel().querySelector('.vb-empty');
+    expect(emptyMsg).not.toBeNull();
+    expect(emptyMsg.textContent).toContain('Uncheck');
+  });
+
+  it('shows DB words when user unchecks inBookOnly after failed scan', async () => {
+    getAllBookWords.mockResolvedValueOnce(new Set());
+    getAllWords.mockResolvedValueOnce([
+      { word: 'saved', level: 1 },
+    ]);
+    await openPanel('en', { bookId: 'book-uncheck-test' });
+
+    // Initially empty (scan failed, inBookOnly=true)
+    expect(wordRows().length).toBe(0);
+
+    // User unchecks "In this book" → should see DB words
+    const cb = panel().querySelector('.vocab-book-cb');
+    cb.checked = false;
+    cb.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => {
+      const rows = wordRows();
+      expect(rows.length).toBe(1);
+      expect(rows[0].dataset.word).toBe('saved');
+    });
   });
 
   it('shows status text when scan returns empty', async () => {

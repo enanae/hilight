@@ -9,35 +9,27 @@
 import ePub from 'epubjs';
 import { highlightContainer, handleWordTap, showWordDefinition, isPopupActive, resetPopupState } from './highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
-
-let currentBook = null;
-let currentRendition = null;
-let currentLanguage = null;
-let currentOnStatsUpdate = null;
-let languageVersion = 0; // guards against overlapping setLanguage() calls
-let cachedBookWords = null;
-let cachedBookId = null;
-let cachedBookLang = null;
+import { state } from './app-state.js';
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
   resetPopupState();
-  cachedBookWords = null;
-  cachedBookId = null;
-  cachedBookLang = null;
-  if (currentRendition) {
+  state.cachedBookWords = null;
+  state.cachedBookId = null;
+  state.cachedBookLang = null;
+  if (state.currentRendition) {
     // Remove all event emitter listeners we registered
-    currentRendition.off('touchstart');
-    currentRendition.off('touchmove');
-    currentRendition.off('touchend');
-    currentRendition.off('click');
-    currentRendition.off('dblclick');
-    currentRendition.destroy();
-    currentRendition = null;
+    state.currentRendition.off('touchstart');
+    state.currentRendition.off('touchmove');
+    state.currentRendition.off('touchend');
+    state.currentRendition.off('click');
+    state.currentRendition.off('dblclick');
+    state.currentRendition.destroy();
+    state.currentRendition = null;
   }
-  if (currentBook) {
-    currentBook.destroy();
-    currentBook = null;
+  if (state.currentBook) {
+    state.currentBook.destroy();
+    state.currentBook = null;
   }
 }
 
@@ -56,7 +48,7 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 
   const data = source instanceof File ? await source.arrayBuffer() : source;
   const book = ePub(data);
-  currentBook = book;
+  state.currentBook = book;
 
   await book.ready;
 
@@ -79,12 +71,12 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     allowScriptedContent: true,
   });
 
-  currentRendition = rendition;
-  currentLanguage = language;
-  currentOnStatsUpdate = options.onStatsUpdate || null;
+  state.currentRendition = rendition;
+  state.currentLanguage = language;
+  state.currentOnStatsUpdate = options.onStatsUpdate || null;
 
   // After each section renders, highlight words and fix iframe for touch.
-  // Uses currentLanguage (mutable) so language changes take effect immediately.
+  // Uses state.currentLanguage (mutable) so language changes take effect immediately.
   rendition.hooks.content.register(async (contents) => {
     const doc = contents.document;
 
@@ -96,14 +88,14 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     // Show loading overlay while highlighting (can be slow on large chapters)
     showLoadingOverlay(viewerEl);
     try {
-      await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
+      await highlightContainer(doc.body, state.currentLanguage, { onStatsUpdate: state.currentOnStatsUpdate });
     } finally {
       hideLoadingOverlay(viewerEl);
     }
   });
 
   // Word tap handling via epubjs's event passthrough system.
-  setupWordTapHandler(rendition, currentOnStatsUpdate);
+  setupWordTapHandler(rendition, state.currentOnStatsUpdate);
 
   await rendition.display();
 
@@ -241,7 +233,7 @@ function findWordSpan(target) {
  * next section when scrolled to the bottom.
  */
 export function nextPage() {
-  if (!currentRendition) return;
+  if (!state.currentRendition) return;
   const container = getScrollContainer();
   if (container) {
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 5;
@@ -250,12 +242,12 @@ export function nextPage() {
       return;
     }
   }
-  return currentRendition.next();
+  return state.currentRendition.next();
 }
 
 /** Navigate to previous page/section. Scrolls up first, then prev section. */
 export function prevPage() {
-  if (!currentRendition) return;
+  if (!state.currentRendition) return;
   const container = getScrollContainer();
   if (container) {
     if (container.scrollTop > 5) {
@@ -263,19 +255,19 @@ export function prevPage() {
       return;
     }
   }
-  return currentRendition.prev();
+  return state.currentRendition.prev();
 }
 
 /** Find the epubjs scrollable container div. */
 function getScrollContainer() {
-  if (!currentRendition?.manager?.container) return null;
-  return currentRendition.manager.container;
+  if (!state.currentRendition?.manager?.container) return null;
+  return state.currentRendition.manager.container;
 }
 
 /** Get table of contents. */
 export async function getToc() {
-  if (!currentBook) return [];
-  const nav = await currentBook.loaded.navigation;
+  if (!state.currentBook) return [];
+  const nav = await state.currentBook.loaded.navigation;
   return nav.toc || [];
 }
 
@@ -286,12 +278,12 @@ export async function getToc() {
  * We try multiple strategies to resolve the href.
  */
 export function goToHref(href) {
-  if (!currentRendition || !currentBook) return;
+  if (!state.currentRendition || !state.currentBook) return;
 
   // Strategy 1: try the href as-is (may work for well-formed epubs)
   const hrefBase = href.split('#')[0];
   const fragment = href.includes('#') ? '#' + href.split('#')[1] : '';
-  const spine = currentBook.spine;
+  const spine = state.currentBook.spine;
 
   // Direct lookup
   let section = spine.get(hrefBase);
@@ -321,10 +313,10 @@ export function goToHref(href) {
   }
 
   if (section) {
-    return currentRendition.display(section.href + fragment);
+    return state.currentRendition.display(section.href + fragment);
   }
   // Last resort: pass through and let epub.js try
-  return currentRendition.display(href);
+  return state.currentRendition.display(href);
 }
 
 /**
@@ -332,8 +324,8 @@ export function goToHref(href) {
  * Called when user changes the language selector while a book is open.
  */
 export async function setLanguage(language) {
-  currentLanguage = language;
-  const thisVersion = ++languageVersion;
+  state.currentLanguage = language;
+  const thisVersion = ++state.languageVersion;
   const doc = getIframeDocument();
   if (doc && doc.body) {
     // Unwrap existing hl-word spans to avoid double-wrapping.
@@ -348,26 +340,26 @@ export async function setLanguage(language) {
     doc.body.normalize();
 
     // Bail out if another setLanguage() call happened while we were unwrapping
-    if (thisVersion !== languageVersion) return;
+    if (thisVersion !== state.languageVersion) return;
 
-    await highlightContainer(doc.body, currentLanguage, { onStatsUpdate: currentOnStatsUpdate });
+    await highlightContainer(doc.body, state.currentLanguage, { onStatsUpdate: state.currentOnStatsUpdate });
   }
 }
 
 /** True when a book is currently loaded and rendition is active. */
 export function isBookLoaded() {
-  return currentBook !== null;
+  return state.currentBook !== null;
 }
 
 /** Stable identifier for the current book (null when no book loaded). */
 export function getBookId() {
-  return currentBook ? currentBook.key() : null;
+  return state.currentBook ? state.currentBook.key() : null;
 }
 
 /** Get the active iframe document (for querying highlighted words). */
 export function getIframeDocument() {
-  if (!currentRendition?.manager) return null;
-  const views = currentRendition.manager.views;
+  if (!state.currentRendition?.manager) return null;
+  const views = state.currentRendition.manager.views;
   if (views && views._views && views._views.length > 0) {
     const view = views._views[views._views.length - 1];
     return view?.document || null;
@@ -381,20 +373,20 @@ export function getIframeDocument() {
  * @param {function} [onProgress] - called with (fraction) 0..1 during scan
  */
 export async function getAllBookWords(onProgress) {
-  if (!currentBook) return null;
-  const bookId = currentBook.key();
-  if (cachedBookId === bookId && cachedBookLang === currentLanguage && cachedBookWords && cachedBookWords.size > 0) return cachedBookWords;
+  if (!state.currentBook) return null;
+  const bookId = state.currentBook.key();
+  if (state.cachedBookId === bookId && state.cachedBookLang === state.currentLanguage && state.cachedBookWords && state.cachedBookWords.size > 0) return state.cachedBookWords;
 
-  const locale = langToLocale(currentLanguage);
+  const locale = langToLocale(state.currentLanguage);
   const words = new Set();
-  const items = currentBook.spine.items;
+  const items = state.currentBook.spine.items;
   let loadedCount = 0;
   let failedCount = 0;
 
   for (let i = 0; i < items.length; i++) {
     try {
-      const section = currentBook.spine.get(items[i].index);
-      const doc = await section.load(currentBook.load.bind(currentBook));
+      const section = state.currentBook.spine.get(items[i].index);
+      const doc = await section.load(state.currentBook.load.bind(state.currentBook));
       const body = doc.body || doc.documentElement;
       if (body) {
         const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
@@ -420,9 +412,9 @@ export async function getAllBookWords(onProgress) {
 
   // Only cache non-empty results — empty scans may be transient failures
   if (words.size > 0) {
-    cachedBookWords = words;
-    cachedBookId = bookId;
-    cachedBookLang = currentLanguage;
+    state.cachedBookWords = words;
+    state.cachedBookId = bookId;
+    state.cachedBookLang = state.currentLanguage;
   }
   return words;
 }
@@ -456,7 +448,7 @@ function setupEndOfSectionBanner(container, viewerEl) {
     banner.className = 'hl-end-banner';
     banner.innerHTML = 'Next chapter &#8594;';
     banner.addEventListener('click', () => {
-      if (currentRendition) currentRendition.next();
+      if (state.currentRendition) state.currentRendition.next();
     });
     viewerEl.style.position = 'relative';
     viewerEl.appendChild(banner);

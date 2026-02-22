@@ -4,6 +4,7 @@ import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
 import { isPopupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
+import { state } from './app-state.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -26,15 +27,13 @@ const LANGUAGES = [
   { code: 'sv', name: 'Swedish' },
 ];
 
-let currentLanguage = localStorage.getItem('hilight-lang') || 'en';
-let defLanguage = localStorage.getItem('hilight-def-lang') || 'en';
-let currentBookId = null; // explicit book state — passed to vocab panel
+// State is centralized in app-state.js — state.currentLanguage, state.defLanguage, state.currentBookId
 
 /** Initialize the app. */
-function init() {
+async function init() {
   renderApp();
   bindEvents();
-  updateStats();
+  await updateStats();
 }
 
 function renderApp() {
@@ -48,14 +47,14 @@ function renderApp() {
         <label class="header-label" for="lang-select">Book:
           <select id="lang-select" aria-label="Book language">
             ${LANGUAGES.map(l =>
-              `<option value="${l.code}" ${l.code === currentLanguage ? 'selected' : ''}>${l.name}</option>`
+              `<option value="${l.code}" ${l.code === state.currentLanguage ? 'selected' : ''}>${l.name}</option>`
             ).join('')}
           </select>
         </label>
         <label class="header-label" for="def-lang-select">Defs:
           <select id="def-lang-select" aria-label="Definition language">
             ${LANGUAGES.map(l =>
-              `<option value="${l.code}" ${l.code === defLanguage ? 'selected' : ''}>${l.name}</option>`
+              `<option value="${l.code}" ${l.code === state.defLanguage ? 'selected' : ''}>${l.name}</option>`
             ).join('')}
           </select>
         </label>
@@ -174,42 +173,42 @@ function bindEvents() {
   uploadArea.addEventListener('dragleave', () => {
     uploadArea.classList.remove('drag-over');
   });
-  uploadArea.addEventListener('drop', (e) => {
+  uploadArea.addEventListener('drop', safeHandler(async (e) => {
     e.preventDefault();
     uploadArea.classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.epub')) openBook(file);
-  });
-  fileInput.addEventListener('change', () => {
+    if (file && file.name.endsWith('.epub')) await openBook(file);
+  }));
+  fileInput.addEventListener('change', safeHandler(async () => {
     const file = fileInput.files[0];
-    if (file && file.name.endsWith('.epub')) openBook(file);
+    if (file && file.name.endsWith('.epub')) await openBook(file);
     fileInput.value = '';
-  });
+  }));
 
   // Book language — re-highlights the current section with the new language
-  document.getElementById('lang-select').addEventListener('change', async (e) => {
-    currentLanguage = e.target.value;
-    localStorage.setItem('hilight-lang', currentLanguage);
-    await setLanguage(currentLanguage);
-    updateStats();
-  });
+  document.getElementById('lang-select').addEventListener('change', safeHandler(async (e) => {
+    state.currentLanguage = e.target.value;
+    localStorage.setItem('hilight-lang', state.currentLanguage);
+    await setLanguage(state.currentLanguage);
+    await updateStats();
+  }));
 
   // Definition language — controls which language definitions are fetched in
   document.getElementById('def-lang-select').addEventListener('change', (e) => {
-    defLanguage = e.target.value;
-    localStorage.setItem('hilight-def-lang', defLanguage);
+    state.defLanguage = e.target.value;
+    localStorage.setItem('hilight-def-lang', state.defLanguage);
   });
 
   // Navigation — suppressed while definition popup is showing
-  document.getElementById('btn-prev').addEventListener('click', () => {
+  document.getElementById('btn-prev').addEventListener('click', safeHandler(() => {
     if (!isPopupActive()) prevPage();
-  });
-  document.getElementById('btn-next').addEventListener('click', () => {
+  }));
+  document.getElementById('btn-next').addEventListener('click', safeHandler(() => {
     if (!isPopupActive()) nextPage();
-  });
+  }));
 
   // Keyboard shortcuts — suppressed while popup showing or typing in inputs
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', safeHandler(async (e) => {
     if (isPopupActive()) return;
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -235,7 +234,7 @@ function bindEvents() {
       case 'v':
       case 'V':
         if (!e.ctrlKey && !e.metaKey) {
-          toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats, getIframeDocument });
+          toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
         }
         break;
       case 'w':
@@ -245,76 +244,72 @@ function bindEvents() {
         }
         break;
     }
-  });
+  }));
 
   // TOC — single delegated handler so it doesn't accumulate on repeated book loads
-  document.getElementById('btn-toc').addEventListener('click', toggleToc);
-  document.getElementById('btn-close-toc').addEventListener('click', toggleToc);
-  document.getElementById('toc-list').addEventListener('click', (e) => {
+  document.getElementById('btn-toc').addEventListener('click', safeHandler(toggleToc));
+  document.getElementById('btn-close-toc').addEventListener('click', safeHandler(toggleToc));
+  document.getElementById('toc-list').addEventListener('click', safeHandler((e) => {
     e.preventDefault();
     const a = e.target.closest('a[data-href]');
     if (a) {
       goToHref(a.dataset.href);
       document.getElementById('toc-panel').classList.remove('open');
     }
-  });
+  }));
 
   // Vocab browser
-  document.getElementById('btn-vocab').addEventListener('click', () => {
-    toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats, getIframeDocument });
-  });
+  document.getElementById('btn-vocab').addEventListener('click', safeHandler(() => {
+    return toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
+  }));
 
   // Mark all words on page as known (with undo)
-  document.getElementById('btn-mark-known').addEventListener('click', doMarkAllKnown);
+  document.getElementById('btn-mark-known').addEventListener('click', safeHandler(doMarkAllKnown));
 
   // Close book
-  document.getElementById('btn-close-book').addEventListener('click', closeBook);
+  document.getElementById('btn-close-book').addEventListener('click', safeHandler(closeBook));
 
   // Settings modal
-  document.getElementById('btn-settings').addEventListener('click', openSettings);
-  document.getElementById('btn-close-settings').addEventListener('click', closeSettings);
-  document.querySelector('#settings-modal .modal-backdrop').addEventListener('click', closeSettings);
+  document.getElementById('btn-settings').addEventListener('click', safeHandler(openSettings));
+  document.getElementById('btn-close-settings').addEventListener('click', safeHandler(closeSettings));
+  document.querySelector('#settings-modal .modal-backdrop').addEventListener('click', safeHandler(closeSettings));
   document.querySelector('#settings-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
-  document.getElementById('btn-save-dict').addEventListener('click', saveDict);
-  document.getElementById('btn-reset-dict').addEventListener('click', resetDict);
-  document.getElementById('dict-provider').addEventListener('change', onProviderChange);
+  document.getElementById('btn-save-dict').addEventListener('click', safeHandler(saveDict));
+  document.getElementById('btn-reset-dict').addEventListener('click', safeHandler(resetDict));
+  document.getElementById('dict-provider').addEventListener('change', safeHandler(onProviderChange));
 
   // Export / Import
-  document.getElementById('btn-export').addEventListener('click', doExport);
-  document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('btn-export').addEventListener('click', safeHandler(doExport));
+  document.getElementById('btn-import').addEventListener('click', safeHandler(() => {
     document.getElementById('import-input').click();
-  });
-  document.getElementById('import-input').addEventListener('change', doImport);
+  }));
+  document.getElementById('import-input').addEventListener('change', safeHandler(doImport));
 }
 
 async function openBook(file) {
-  const uploadArea = document.getElementById('upload-area');
-  const readerArea = document.getElementById('reader-area');
   const viewer = document.getElementById('epub-viewer');
 
-  uploadArea.classList.add('hidden');
-  readerArea.classList.add('open');
-
   try {
-    await loadEpub(file, viewer, currentLanguage, {
+    await loadEpub(file, viewer, state.currentLanguage, {
       onStatsUpdate: updateStats,
       onBookLoaded: (meta) => {
         document.getElementById('book-title').textContent = meta.title;
       },
     });
 
-    // Set book identity from the file itself — no cross-module getter needed.
-    // file.name + file.size is unique enough for cache invalidation and
-    // avoids depending on epub-reader's internal state or epubjs's key() method.
-    currentBookId = `${file.name}:${file.size}`;
+    state.currentBookId = `${file.name}:${file.size}`;
 
-    // Load TOC (with nested sub-items)
     const toc = await getToc();
-    const tocList = document.getElementById('toc-list');
-    tocList.innerHTML = renderTocItems(toc, 0);
+    document.getElementById('toc-list').innerHTML = renderTocItems(toc, 0);
+
+    // Show reader ONLY after successful load
+    document.getElementById('upload-area').classList.add('hidden');
+    document.getElementById('reader-area').classList.add('open');
   } catch (err) {
     console.error('Failed to open epub:', err);
-    closeBook();
+    // Clean up partial state without touching UI (upload area stays visible)
+    try { destroyEpub(); } catch (_) { /* ignore */ }
+    state.currentBookId = null;
     showError('Could not open this file. Make sure it is a valid .epub file.');
   }
 }
@@ -329,15 +324,27 @@ function showError(msg) {
   setTimeout(() => toast.remove(), 5000);
 }
 
+/** Wrap an event handler so errors are caught and shown instead of cascading. */
+function safeHandler(fn) {
+  return async (...args) => {
+    try {
+      await fn(...args);
+    } catch (err) {
+      console.error('[hilight]', err);
+      showError('Something went wrong. Try closing and reopening the book.');
+    }
+  };
+}
+
 async function doMarkAllKnown() {
   const iframeDoc = getIframeDocument();
   if (!iframeDoc) return;
   const prev = await markAllKnown(iframeDoc);
-  updateStats();
+  await updateStats();
   if (prev.length === 0) return;
   showUndoToast(`Marked ${prev.length} words as known`, async () => {
     await restoreWordLevels(iframeDoc, prev);
-    updateStats();
+    await updateStats();
   });
 }
 
@@ -349,11 +356,16 @@ function showUndoToast(message, onUndo) {
   toast.innerHTML = `<span>${message}</span><button class="undo-btn">Undo</button>`;
   const btn = toast.querySelector('.undo-btn');
   let dismissed = false;
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     if (dismissed) return;
     dismissed = true;
     toast.remove();
-    onUndo();
+    try {
+      await onUndo();
+    } catch (err) {
+      console.error('[hilight] Undo failed:', err);
+      showError('Undo failed. Check the console for details.');
+    }
   });
   document.getElementById('app').appendChild(toast);
   setTimeout(() => {
@@ -374,10 +386,12 @@ function renderTocItems(items, depth) {
 }
 
 function closeBook() {
-  currentBookId = null;
-  destroyEpub();
-  closeVocabPanel();
-  resetVocabBookState();
+  state.currentBookId = null;
+  // Cleanup may throw (e.g. partial init) — catch each so UI reset ALWAYS runs
+  try { destroyEpub(); } catch (err) { console.error('[hilight] destroyEpub failed:', err); }
+  try { closeVocabPanel(); } catch (err) { console.error('[hilight] closeVocabPanel failed:', err); }
+  try { resetVocabBookState(); } catch (err) { console.error('[hilight] resetVocabBookState failed:', err); }
+  // UI reset — always runs regardless of cleanup errors
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('toc-panel').classList.remove('open');
@@ -399,20 +413,20 @@ async function updateStats() {
   document.getElementById('stat-partial').textContent = `~ ${partialOnPage}`;
   document.getElementById('stat-known').textContent = `\u2713 ${knownOnPage}`;
   // DB total: how many words the user has saved across all pages
-  const stats = await getStats(currentLanguage);
+  const stats = await getStats(state.currentLanguage);
   document.getElementById('stat-saved').textContent = `\uD83D\uDCDA ${stats.total} saved`;
 }
 
 function openSettings() {
   const modal = document.getElementById('settings-modal');
-  const langName = LANGUAGES.find(l => l.code === currentLanguage)?.name || currentLanguage;
+  const langName = LANGUAGES.find(l => l.code === state.currentLanguage)?.name || state.currentLanguage;
   document.getElementById('settings-lang-name').textContent = langName;
 
   // Set the dropdown to the currently active provider
   const settings = loadDictSettings();
-  const saved = settings[currentLanguage];
+  const saved = settings[state.currentLanguage];
   // Handle old settings format: urlTemplate without provider means custom
-  const activeId = (saved?.urlTemplate && !saved?.provider) ? 'custom' : getActiveProviderId(currentLanguage);
+  const activeId = (saved?.urlTemplate && !saved?.provider) ? 'custom' : getActiveProviderId(state.currentLanguage);
   const providerSelect = document.getElementById('dict-provider');
   providerSelect.value = activeId;
 
@@ -448,11 +462,11 @@ function saveDict() {
       return;
     }
     const settings = loadDictSettings();
-    settings[currentLanguage] = { provider: 'custom', urlTemplate: url };
+    settings[state.currentLanguage] = { provider: 'custom', urlTemplate: url };
     saveDictSettings(settings);
   } else {
     const settings = loadDictSettings();
-    settings[currentLanguage] = { provider };
+    settings[state.currentLanguage] = { provider };
     saveDictSettings(settings);
   }
 
@@ -469,23 +483,23 @@ function saveDict() {
 
 function resetDict() {
   const settings = loadDictSettings();
-  delete settings[currentLanguage];
+  delete settings[state.currentLanguage];
   saveDictSettings(settings);
 
   // Reset UI to defaults
-  const defaultId = getActiveProviderId(currentLanguage);
+  const defaultId = getActiveProviderId(state.currentLanguage);
   document.getElementById('dict-provider').value = defaultId;
   document.getElementById('dict-url').value = '';
   toggleCustomFields(false);
 }
 
 async function doExport() {
-  const data = await exportVocab(currentLanguage);
+  const data = await exportVocab(state.currentLanguage);
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `hilight-vocab-${currentLanguage}.json`;
+  a.download = `hilight-vocab-${state.currentLanguage}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -497,12 +511,18 @@ async function doImport(e) {
     const text = await file.text();
     const data = JSON.parse(text);
     await importVocab(data);
-    updateStats();
+    await updateStats();
   } catch (err) {
     console.error('Import failed:', err);
   }
   e.target.value = '';
 }
+
+// Surface async errors that would otherwise vanish silently
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[hilight] Unhandled async error:', event.reason);
+  showError('Something went wrong. Check the console for details.');
+});
 
 // Warn before navigating away while a book is open (book data is in-memory only)
 window.addEventListener('beforeunload', (e) => {
