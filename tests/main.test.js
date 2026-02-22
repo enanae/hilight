@@ -445,8 +445,11 @@ describe('Focus Mode', () => {
     expect(document.getElementById('toc-panel').classList.contains('open')).toBe(false);
   });
 
-  it('exit-focus button exists', () => {
+  it('focus toolbar button and focus bar elements exist', () => {
+    expect(document.getElementById('btn-focus')).not.toBeNull();
     expect(document.getElementById('btn-exit-focus')).not.toBeNull();
+    expect(document.getElementById('btn-focus-vocab')).not.toBeNull();
+    expect(document.getElementById('focus-bar')).not.toBeNull();
   });
 
   it('w (close book) also removes focus-mode', () => {

@@ -1151,32 +1151,18 @@ html, body {
   display: none;
 }
 
-.focus-exit-btn {
+.focus-bar {
   display: none;
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 100;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
   background: var(--surface);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  opacity: 0.3;
-  transition: opacity 0.2s;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-#app.focus-mode .focus-exit-btn {
-  display: block;
-}
-
-.focus-exit-btn:hover {
-  opacity: 1;
-  background: var(--accent-dim);
-  border-color: var(--accent);
-  color: var(--accent);
+#app.focus-mode .focus-bar {
+  display: flex;
 }
 
 /* === Responsive === */
@@ -1267,5 +1253,19 @@ html, body {
     gap: 8px;
     padding: 4px 10px;
     font-size: 11px;
+  }
+
+  .focus-bar {
+    padding: 4px 6px;
+    gap: 6px;
+  }
+
+  /* Ensure 44px minimum touch target for focus bar buttons on mobile */
+  .focus-bar .toolbar-btn {
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }

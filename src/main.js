@@ -95,13 +95,17 @@ function renderApp() {
       </div>
 
       <div id="reader-area" class="reader-area">
-        <button id="btn-exit-focus" class="focus-exit-btn" title="Exit focus mode (F)">&#9776; Menu</button>
+        <div id="focus-bar" class="focus-bar">
+          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#9776;<span class="btn-label"> Menu</span></button>
+          <button id="btn-focus-vocab" class="toolbar-btn" title="Vocabulary (V)">&#128218;<span class="btn-label"> Vocab</span></button>
+        </div>
         <div class="reader-toolbar">
           <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label"> Contents</span></button>
           <span id="book-title" class="book-title"></span>
           <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> Page known</span></button>
           <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label"> Vocab</span></button>
           <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label"> Open</span></button>
+          <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label"> Focus</span></button>
           <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close book</span></button>
         </div>
         <div class="reader-nav">
@@ -412,8 +416,12 @@ function bindEvents() {
     }
   }));
 
-  // Focus mode exit button
+  // Focus mode
+  document.getElementById('btn-focus').addEventListener('click', safeHandler(toggleFocusMode));
   document.getElementById('btn-exit-focus').addEventListener('click', safeHandler(exitFocusMode));
+  document.getElementById('btn-focus-vocab').addEventListener('click', safeHandler(() => {
+    return toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
+  }));
 
   // Vocab browser
   document.getElementById('btn-vocab').addEventListener('click', safeHandler(() => {
