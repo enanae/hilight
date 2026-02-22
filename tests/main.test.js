@@ -416,6 +416,48 @@ describe('Reading Hint', () => {
   });
 });
 
+// ── Subdomain: Focus Mode ───────────────────────────────────────────────
+
+describe('Focus Mode', () => {
+  function pressKey(key, opts = {}) {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
+  }
+
+  it('f toggles focus-mode class on #app', () => {
+    const app = document.getElementById('app');
+    expect(app.classList.contains('focus-mode')).toBe(false);
+    pressKey('f');
+    expect(app.classList.contains('focus-mode')).toBe(true);
+    pressKey('f');
+    expect(app.classList.contains('focus-mode')).toBe(false);
+  });
+
+  it('does not toggle when ctrl/meta is held', () => {
+    pressKey('f', { ctrlKey: true });
+    expect(document.getElementById('app').classList.contains('focus-mode')).toBe(false);
+    pressKey('f', { metaKey: true });
+    expect(document.getElementById('app').classList.contains('focus-mode')).toBe(false);
+  });
+
+  it('closes TOC panel when entering focus mode', () => {
+    document.getElementById('toc-panel').classList.add('open');
+    pressKey('f');
+    expect(document.getElementById('toc-panel').classList.contains('open')).toBe(false);
+  });
+
+  it('exit-focus button exists', () => {
+    expect(document.getElementById('btn-exit-focus')).not.toBeNull();
+  });
+
+  it('w (close book) also removes focus-mode', () => {
+    const app = document.getElementById('app');
+    app.classList.add('focus-mode');
+    document.getElementById('reader-area').classList.add('open');
+    pressKey('w');
+    expect(app.classList.contains('focus-mode')).toBe(false);
+  });
+});
+
 // ── Subdomain: TOC Toggle ───────────────────────────────────────────────
 
 describe('TOC Toggle', () => {

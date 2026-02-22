@@ -95,6 +95,7 @@ function renderApp() {
       </div>
 
       <div id="reader-area" class="reader-area">
+        <button id="btn-exit-focus" class="focus-exit-btn" title="Exit focus mode (F)">&#9776; Menu</button>
         <div class="reader-toolbar">
           <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label"> Contents</span></button>
           <span id="book-title" class="book-title"></span>
@@ -118,7 +119,7 @@ function renderApp() {
           <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
         </div>
         <div id="reading-hint" class="reading-hint">
-          <kbd>Tab</kbd> review words &middot; <kbd>?</kbd> shortcuts
+          <kbd>Tab</kbd> review words &middot; <kbd>f</kbd> focus &middot; <kbd>?</kbd> shortcuts
         </div>
       </div>
 
@@ -202,6 +203,7 @@ function renderApp() {
                 <dt>T</dt><dd>Table of contents</dd>
                 <dt>K</dt><dd>Mark page as known</dd>
                 <dt>V</dt><dd>Vocabulary panel</dd>
+                <dt>F</dt><dd>Focus mode</dd>
                 <dt>W</dt><dd>Close book</dd>
                 <dt>?</dt><dd>This help</dd>
               </dl>
@@ -391,6 +393,10 @@ function bindEvents() {
       case '?':
         toggleHelp();
         break;
+      case 'f':
+      case 'F':
+        if (!e.ctrlKey && !e.metaKey) toggleFocusMode();
+        break;
     }
   }));
 
@@ -405,6 +411,9 @@ function bindEvents() {
       document.getElementById('toc-panel').classList.remove('open');
     }
   }));
+
+  // Focus mode exit button
+  document.getElementById('btn-exit-focus').addEventListener('click', safeHandler(exitFocusMode));
 
   // Vocab browser
   document.getElementById('btn-vocab').addEventListener('click', safeHandler(() => {
@@ -524,6 +533,7 @@ function closeBook() {
   try { closeVocabPanel(); } catch (err) { console.error('[hilight] closeVocabPanel failed:', err); }
   try { resetVocabBookState(); } catch (err) { console.error('[hilight] resetVocabBookState failed:', err); }
   // UI reset — always runs regardless of cleanup errors
+  document.getElementById('app').classList.remove('focus-mode');
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('toc-panel').classList.remove('open');
@@ -533,6 +543,23 @@ function closeBook() {
 function toggleToc() {
   closeVocabPanel();
   document.getElementById('toc-panel').classList.toggle('open');
+}
+
+function toggleFocusMode() {
+  const app = document.getElementById('app');
+  const entering = !app.classList.contains('focus-mode');
+  if (entering) {
+    // Close panels/modals before entering focus mode
+    document.getElementById('toc-panel').classList.remove('open');
+    closeVocabPanel();
+    closeSettings();
+    closeHelp();
+  }
+  app.classList.toggle('focus-mode');
+}
+
+function exitFocusMode() {
+  document.getElementById('app').classList.remove('focus-mode');
 }
 
 async function updateStats() {
