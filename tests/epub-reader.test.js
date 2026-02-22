@@ -129,7 +129,7 @@ vi.mock('../src/highlighter.js', () => ({
   highlightContainer: vi.fn(async () => {}),
   handleWordTap:      vi.fn(async () => {}),
   showWordDefinition: vi.fn(),
-  popupActive:        false,
+  isPopupActive:      vi.fn(() => false),
   resetPopupState:    vi.fn(),
 }));
 
@@ -164,7 +164,7 @@ import {
   getAllBookWords,
 } from '../src/epub-reader.js';
 
-import { highlightContainer, resetPopupState } from '../src/highlighter.js';
+import { highlightContainer, resetPopupState, isPopupActive } from '../src/highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from '../src/tokenizer.js';
 import ePub from 'epubjs';
 

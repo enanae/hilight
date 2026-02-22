@@ -37,7 +37,6 @@ vi.mock('../src/vocab-store.js', () => ({
 
 vi.mock('../src/epub-reader.js', () => ({
   getAllBookWords: vi.fn(async () => null),
-  getIframeDocument: vi.fn(() => null),
 }));
 
 vi.mock('../src/highlighter.js', () => ({
@@ -47,7 +46,7 @@ vi.mock('../src/highlighter.js', () => ({
 
 import { openPanel, closePanel, isOpen, togglePanel, resetBookState } from '../src/vocab-browser.js';
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from '../src/vocab-store.js';
-import { getAllBookWords, getIframeDocument } from '../src/epub-reader.js';
+import { getAllBookWords } from '../src/epub-reader.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -957,8 +956,8 @@ describe('Forget book words', () => {
 // for this persistent state.
 
 describe('In-book mode', () => {
-  // These tests simulate a book being loaded by mocking isBookLoaded
-  // and getBookId. When a book is detected, openPanel auto-enables
+  // These tests simulate a book being loaded by passing bookId via
+  // options. When a book is detected, openPanel auto-enables
   // "In this book" mode and triggers a scan, so the user sees book
   // words immediately.
 
@@ -1127,9 +1126,9 @@ describe('Reader span syncing', () => {
     span.dataset.level = '1';
     iframeDoc.body.appendChild(span);
 
-    getIframeDocument.mockReturnValue(iframeDoc);
+    const mockGetIframeDoc = () => iframeDoc;
     getAllWords.mockResolvedValueOnce([{ word: 'cat', level: 1 }]);
-    await openPanel('en');
+    await openPanel('en', { getIframeDocument: mockGetIframeDoc });
 
     clickWordRow('cat');
     await flush();
@@ -1147,12 +1146,12 @@ describe('Reader span syncing', () => {
     span.dataset.level = '1';
     iframeDoc.body.appendChild(span);
 
-    getIframeDocument.mockReturnValue(iframeDoc);
+    const mockGetIframeDoc = () => iframeDoc;
     getAllWords.mockResolvedValueOnce([{ word: 'cat', level: 1 }]);
     deleteAllWords.mockResolvedValueOnce([
       { language: 'en', word: 'cat', level: 1 },
     ]);
-    await openPanel('en');
+    await openPanel('en', { getIframeDocument: mockGetIframeDoc });
 
     const forgetBtn = panel().querySelector('.vocab-forget-btn[data-scope="all"]');
     forgetBtn.click();

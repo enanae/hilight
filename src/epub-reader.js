@@ -7,7 +7,7 @@
  * for DOM events inside the iframe and re-emits them on the rendition.
  */
 import ePub from 'epubjs';
-import { highlightContainer, handleWordTap, showWordDefinition, popupActive, resetPopupState } from './highlighter.js';
+import { highlightContainer, handleWordTap, showWordDefinition, isPopupActive, resetPopupState } from './highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 
 let currentBook = null;
@@ -142,7 +142,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
 
   rendition.on('touchstart', (e) => {
     // Don't start new interactions while popup is showing
-    if (popupActive) return;
+    if (isPopupActive()) return;
     if (!e.touches || !e.touches[0]) return;
     const t = e.touches[0];
     touchStartX = t.clientX;
@@ -205,7 +205,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
       hadTouchRecently = false;
       return;
     }
-    if (popupActive) return;
+    if (isPopupActive()) return;
     const span = findWordSpan(e.target);
     if (!span) return;
 
@@ -216,7 +216,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   });
 
   rendition.on('dblclick', (e) => {
-    if (popupActive) return;
+    if (isPopupActive()) return;
     const span = findWordSpan(e.target);
     if (!span) return;
     showWordDefinition(span);
