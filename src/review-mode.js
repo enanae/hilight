@@ -19,7 +19,8 @@ export function isReviewMode() {
 }
 
 /**
- * Enter review mode. Focuses the first eligible word on the page.
+ * Enter review mode. Focuses the nearest eligible word to the last
+ * mouse/touch interaction, or the first eligible word if none.
  * @param {Document} iframeDoc - the epub iframe document
  */
 export function enterReviewMode(iframeDoc) {
@@ -31,6 +32,28 @@ export function enterReviewMode(iframeDoc) {
     // No words to review on this page
     state.reviewMode = false;
     return;
+  }
+
+  // Start from the last word the user interacted with, if it's on this page
+  const lastWord = state.lastInteractedWord;
+  if (lastWord) {
+    const idx = words.indexOf(lastWord);
+    if (idx >= 0) {
+      focusWord(words[idx]);
+      return;
+    }
+    // Last interacted word isn't eligible (e.g. filtered out as known) —
+    // find the nearest eligible word by document position
+    const allSpans = [...iframeDoc.querySelectorAll('.hl-word')];
+    const lastPos = allSpans.indexOf(lastWord);
+    if (lastPos >= 0) {
+      // Find the closest eligible word after the last interacted position
+      const nearest = words.find(w => allSpans.indexOf(w) >= lastPos);
+      if (nearest) {
+        focusWord(nearest);
+        return;
+      }
+    }
   }
 
   focusWord(words[0]);

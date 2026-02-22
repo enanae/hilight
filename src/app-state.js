@@ -36,6 +36,9 @@ export const state = {
   reviewShowAll: false,        // false = skip known words, true = navigate all
   reviewPendingResume: false,  // true = re-enter review after section change
 
+  // Last word the user interacted with via mouse/touch (for review mode start position)
+  lastInteractedWord: null,
+
   // Popup — highlighter.js
   popupActive: false,
 
@@ -75,6 +78,7 @@ export function resetState() {
   state.reviewLastGrade = null;
   state.reviewShowAll = false;
   state.reviewPendingResume = false;
+  state.lastInteractedWord = null;
   state.popupActive = false;
   Object.assign(state.vocab, {
     panelEl: null,

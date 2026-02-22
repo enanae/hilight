@@ -113,6 +113,14 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 
   await rendition.display();
 
+  // Auto-skip empty initial sections (e.g. cover pages, title pages with only images).
+  // Try advancing up to 3 times to find a section with actual text content.
+  for (let skip = 0; skip < 3; skip++) {
+    const doc = getIframeDocument();
+    if (doc && doc.querySelectorAll('.hl-word').length > 0) break;
+    await rendition.next();
+  }
+
   // After display, fix the epub-container for iOS momentum scrolling
   // and add a scroll-to-bottom indicator.
   const container = getScrollContainer();
@@ -201,6 +209,7 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
       const now = Date.now();
       if (now - lastActionTime < DEBOUNCE_MS) return;
       lastActionTime = now;
+      state.lastInteractedWord = span;
       handleWordTap(span, onStatsUpdate);
     }
   });
@@ -224,6 +233,7 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     const now = Date.now();
     if (now - lastActionTime < DEBOUNCE_MS) return;
     lastActionTime = now;
+    state.lastInteractedWord = span;
     handleWordTap(span, onStatsUpdate);
   });
 

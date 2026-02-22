@@ -56,7 +56,7 @@ function createMockRendition() {
   });
   container.scrollBy = vi.fn(({ top }) => { container.scrollTop += top; });
 
-  const iframeDoc = makeSectionDoc('<p>iframe content</p>');
+  const iframeDoc = makeSectionDoc('<p><span class="hl-word hl-unknown" data-word="hello" data-level="0" data-language="en">hello</span></p>');
 
   const rendition = {
     display:  vi.fn(async () => {}),

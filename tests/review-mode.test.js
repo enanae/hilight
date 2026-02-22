@@ -97,6 +97,48 @@ describe('enterReviewMode', () => {
     enterReviewMode(null);
     expect(isReviewMode()).toBe(false);
   });
+
+  it('starts from the last interacted word when set', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+      { text: 'foo', level: 0 },
+    ]);
+    // Simulate user clicking "world"
+    const spans = doc.querySelectorAll('.hl-word');
+    state.lastInteractedWord = spans[1]; // "world"
+    enterReviewMode(doc);
+    expect(getFocusedWord().textContent).toBe('world');
+    exitReviewMode();
+  });
+
+  it('starts from nearest eligible word when last interacted is known', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'the', level: 2 },   // known — filtered out
+      { text: 'world', level: 0 },
+    ]);
+    // User clicked "the" (known word, filtered out in default mode)
+    const spans = doc.querySelectorAll('.hl-word');
+    state.lastInteractedWord = spans[1]; // "the"
+    enterReviewMode(doc);
+    // Should focus "world" — the nearest eligible word after "the"
+    expect(getFocusedWord().textContent).toBe('world');
+    exitReviewMode();
+  });
+
+  it('falls back to first word when last interacted is from a different page', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+    ]);
+    // Set a span from a different document
+    const otherDoc = makeIframeDoc([{ text: 'other', level: 0 }]);
+    state.lastInteractedWord = otherDoc.querySelector('.hl-word');
+    enterReviewMode(doc);
+    expect(getFocusedWord().textContent).toBe('hello'); // falls back to first
+    exitReviewMode();
+  });
 });
 
 describe('exitReviewMode', () => {
