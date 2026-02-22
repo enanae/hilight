@@ -29,6 +29,13 @@ export const state = {
   eventScope: null,      // managed event listener scope for rendition
   scrollCleanup: null,   // disposer for scroll listener
 
+  // Review mode — keyboard word navigation
+  reviewMode: false,           // true when keyboard word navigation is active
+  reviewFocusedWord: null,     // the currently focused .hl-word span (or null)
+  reviewLastGrade: null,       // last grade applied (for Space quick-advance)
+  reviewShowAll: false,        // false = skip known words, true = navigate all
+  reviewPendingResume: false,  // true = re-enter review after section change
+
   // Popup — highlighter.js
   popupActive: false,
 
@@ -63,6 +70,11 @@ export function resetState() {
   state.cachedBookWords = null;
   state.cachedBookId = null;
   state.cachedBookLang = null;
+  state.reviewMode = false;
+  state.reviewFocusedWord = null;
+  state.reviewLastGrade = null;
+  state.reviewShowAll = false;
+  state.reviewPendingResume = false;
   state.popupActive = false;
   Object.assign(state.vocab, {
     panelEl: null,

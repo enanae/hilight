@@ -11,6 +11,7 @@ import { highlightContainer, handleWordTap, showWordDefinition, isPopupActive, r
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 import { state } from './app-state.js';
 import { loadSectionForScan, createEventScope, addManagedScrollListener, getActiveDocument } from './epub-adapter.js';
+import { enterReviewMode } from './review-mode.js';
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
@@ -97,6 +98,12 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     } finally {
       hideLoadingOverlay(viewerEl);
     }
+
+    // Resume review mode after section change if pending
+    if (state.reviewPendingResume) {
+      state.reviewPendingResume = false;
+      enterReviewMode(doc);
+    }
   });
 
   // Word tap handling via epubjs's event passthrough system.
@@ -135,6 +142,8 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
   let lastActionTime = 0;
   let hadTouchRecently = false; // suppress synthetic click after touch
   let hadTouchTimer = null;
+  let mouseDownTimer = null;     // desktop long-press timer
+  let mouseLongPressFired = false;
   const TAP_THRESHOLD = 10;
   const LONG_PRESS_MS = 500;
   const DEBOUNCE_MS = 300;
@@ -204,6 +213,10 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
       hadTouchRecently = false;
       return;
     }
+    if (mouseLongPressFired) {
+      mouseLongPressFired = false;
+      return;
+    }
     if (isPopupActive()) return;
     const span = findWordSpan(e.target);
     if (!span) return;
@@ -219,6 +232,35 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     const span = findWordSpan(e.target);
     if (!span) return;
     showWordDefinition(span);
+  });
+
+  // Desktop long-press: mousedown starts timer, mouseup/mousemove cancels.
+  // Mirrors the touchstart/touchend long-press behavior for mouse users.
+  eventScope.on('mousedown', (e) => {
+    if (e.button !== 0) return; // left button only
+    if (isPopupActive()) return;
+    mouseLongPressFired = false;
+    const span = findWordSpan(e.target);
+    if (!span) return;
+    mouseDownTimer = setTimeout(() => {
+      mouseDownTimer = null;
+      mouseLongPressFired = true;
+      showWordDefinition(span);
+    }, LONG_PRESS_MS);
+  });
+
+  eventScope.on('mousemove', () => {
+    if (mouseDownTimer) {
+      clearTimeout(mouseDownTimer);
+      mouseDownTimer = null;
+    }
+  });
+
+  eventScope.on('mouseup', () => {
+    if (mouseDownTimer) {
+      clearTimeout(mouseDownTimer);
+      mouseDownTimer = null;
+    }
   });
 }
 
@@ -529,6 +571,11 @@ function injectStyles(doc) {
     }
     .hl-word:active {
       transform: scale(0.97);
+    }
+    .hl-word.hl-focused {
+      outline: 2px solid #a855f7;
+      outline-offset: 2px;
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
     }
     .hl-popup {
       position: fixed;
