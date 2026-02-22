@@ -5,6 +5,7 @@ import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId,
 import { isPopupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 import { state } from './app-state.js';
+import { escapeHtml, showUndoToast, showError } from './ui-utils.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -314,16 +315,6 @@ async function openBook(file) {
   }
 }
 
-function showError(msg) {
-  const existing = document.querySelector('.error-toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = 'error-toast';
-  toast.textContent = msg;
-  document.getElementById('app').appendChild(toast);
-  setTimeout(() => toast.remove(), 5000);
-}
-
 /** Wrap an event handler so errors are caught and shown instead of cascading. */
 function safeHandler(fn) {
   return async (...args) => {
@@ -348,36 +339,10 @@ async function doMarkAllKnown() {
   });
 }
 
-function showUndoToast(message, onUndo) {
-  const existing = document.querySelector('.undo-toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = 'undo-toast';
-  toast.innerHTML = `<span>${message}</span><button class="undo-btn">Undo</button>`;
-  const btn = toast.querySelector('.undo-btn');
-  let dismissed = false;
-  btn.addEventListener('click', async () => {
-    if (dismissed) return;
-    dismissed = true;
-    toast.remove();
-    try {
-      await onUndo();
-    } catch (err) {
-      console.error('[hilight] Undo failed:', err);
-      showError('Undo failed. Check the console for details.');
-    }
-  });
-  document.getElementById('app').appendChild(toast);
-  setTimeout(() => {
-    dismissed = true;
-    toast.remove();
-  }, 6000);
-}
-
 function renderTocItems(items, depth) {
   return items.map(item => {
     const indent = depth > 0 ? ` style="padding-left:${16 + depth * 16}px"` : '';
-    let html = `<li><a href="#" data-href="${item.href}"${indent}>${item.label.trim()}</a></li>`;
+    let html = `<li><a href="#" data-href="${escapeHtml(item.href)}"${indent}>${escapeHtml(item.label.trim())}</a></li>`;
     if (item.subitems && item.subitems.length > 0) {
       html += renderTocItems(item.subitems, depth + 1);
     }
@@ -514,6 +479,7 @@ async function doImport(e) {
     await updateStats();
   } catch (err) {
     console.error('Import failed:', err);
+    showError('Import failed. Make sure the file is valid JSON exported from hilight.');
   }
   e.target.value = '';
 }

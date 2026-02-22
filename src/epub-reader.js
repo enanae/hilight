@@ -10,6 +10,7 @@ import ePub from 'epubjs';
 import { highlightContainer, handleWordTap, showWordDefinition, isPopupActive, resetPopupState } from './highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 import { state } from './app-state.js';
+import { loadSectionForScan, createEventScope, addManagedScrollListener, getActiveDocument } from './epub-adapter.js';
 
 /** Clean up the current book and rendition. */
 export function destroyEpub() {
@@ -17,13 +18,17 @@ export function destroyEpub() {
   state.cachedBookWords = null;
   state.cachedBookId = null;
   state.cachedBookLang = null;
+  // Clean up managed scroll listener before destroying rendition
+  if (state.scrollCleanup) {
+    state.scrollCleanup();
+    state.scrollCleanup = null;
+  }
   if (state.currentRendition) {
-    // Remove all event emitter listeners we registered
-    state.currentRendition.off('touchstart');
-    state.currentRendition.off('touchmove');
-    state.currentRendition.off('touchend');
-    state.currentRendition.off('click');
-    state.currentRendition.off('dblclick');
+    // Dispose all event listeners via the managed scope
+    if (state.eventScope) {
+      state.eventScope.dispose();
+      state.eventScope = null;
+    }
     state.currentRendition.destroy();
     state.currentRendition = null;
   }
@@ -95,7 +100,9 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
   });
 
   // Word tap handling via epubjs's event passthrough system.
-  setupWordTapHandler(rendition, state.currentOnStatsUpdate);
+  // Use a managed event scope so destroyEpub() can cleanly remove all listeners.
+  state.eventScope = createEventScope(rendition);
+  setupWordTapHandler(state.eventScope, state.currentOnStatsUpdate);
 
   await rendition.display();
 
@@ -120,7 +127,7 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
  * used for definition, but we keep it simple: click cycles, and the
  * long-press logic handles touch.
  */
-function setupWordTapHandler(rendition, onStatsUpdate) {
+function setupWordTapHandler(eventScope, onStatsUpdate) {
   let touchStartX = 0;
   let touchStartY = 0;
   let longPressTimer = null;
@@ -132,7 +139,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   const LONG_PRESS_MS = 500;
   const DEBOUNCE_MS = 300;
 
-  rendition.on('touchstart', (e) => {
+  eventScope.on('touchstart', (e) => {
     // Don't start new interactions while popup is showing
     if (isPopupActive()) return;
     if (!e.touches || !e.touches[0]) return;
@@ -158,7 +165,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   });
 
   // Cancel long press if finger moves (scrolling)
-  rendition.on('touchmove', (e) => {
+  eventScope.on('touchmove', (e) => {
     if (!e.changedTouches || !e.changedTouches[0]) return;
     const t = e.changedTouches[0];
     const dx = Math.abs(t.clientX - touchStartX);
@@ -168,7 +175,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     }
   });
 
-  rendition.on('touchend', (e) => {
+  eventScope.on('touchend', (e) => {
     clearTimeout(longPressTimer);
     if (isPopupActive() || longPressFired) return;
 
@@ -192,7 +199,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
   // Desktop only: click cycles state, dblclick shows definition.
   // On touch devices the browser fires a synthetic click after touchend —
   // skip it by checking hadTouchRecently.
-  rendition.on('click', (e) => {
+  eventScope.on('click', (e) => {
     if (hadTouchRecently) {
       hadTouchRecently = false;
       return;
@@ -207,7 +214,7 @@ function setupWordTapHandler(rendition, onStatsUpdate) {
     handleWordTap(span, onStatsUpdate);
   });
 
-  rendition.on('dblclick', (e) => {
+  eventScope.on('dblclick', (e) => {
     if (isPopupActive()) return;
     const span = findWordSpan(e.target);
     if (!span) return;
@@ -358,13 +365,7 @@ export function getBookId() {
 
 /** Get the active iframe document (for querying highlighted words). */
 export function getIframeDocument() {
-  if (!state.currentRendition?.manager) return null;
-  const views = state.currentRendition.manager.views;
-  if (views && views._views && views._views.length > 0) {
-    const view = views._views[views._views.length - 1];
-    return view?.document || null;
-  }
-  return null;
+  return getActiveDocument(state.currentRendition);
 }
 
 /**
@@ -377,7 +378,8 @@ export async function getAllBookWords(onProgress) {
   const bookId = state.currentBook.key();
   if (state.cachedBookId === bookId && state.cachedBookLang === state.currentLanguage && state.cachedBookWords && state.cachedBookWords.size > 0) return state.cachedBookWords;
 
-  const locale = langToLocale(state.currentLanguage);
+  const startLanguage = state.currentLanguage;
+  const locale = langToLocale(startLanguage);
   const words = new Set();
   const items = state.currentBook.spine.items;
   let loadedCount = 0;
@@ -385,9 +387,8 @@ export async function getAllBookWords(onProgress) {
 
   for (let i = 0; i < items.length; i++) {
     try {
-      const section = state.currentBook.spine.get(items[i].index);
-      const doc = await section.load(state.currentBook.load.bind(state.currentBook));
-      const body = doc.body || doc.documentElement;
+      // Use adapter — correctly returns {document, body, unload}
+      const { document: doc, body, unload } = await loadSectionForScan(state.currentBook, items[i].index);
       if (body) {
         const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
@@ -395,17 +396,26 @@ export async function getAllBookWords(onProgress) {
           if (!text.trim()) continue;
           const segs = tokenize(text, locale);
           for (const seg of segs) {
-            if (seg.isWord) words.add(normalizeWord(seg.text, locale));
+            if (seg.isWord) {
+              const normalized = normalizeWord(seg.text, locale);
+              if (normalized) words.add(normalized);
+            }
           }
         }
       }
-      section.unload();
+      unload();
       loadedCount++;
     } catch (err) {
       failedCount++;
       console.warn(`[scan] section ${i} failed:`, err);
     }
     if (onProgress) onProgress((i + 1) / items.length);
+  }
+
+  // Guard: if language changed during scan, don't cache stale results
+  if (state.currentLanguage !== startLanguage) {
+    console.warn('[scan] language changed during scan, discarding results');
+    return words;
   }
 
   console.log(`[scan] ${items.length} spine items: ${loadedCount} loaded, ${failedCount} failed, ${words.size} unique words`);
@@ -458,7 +468,8 @@ function setupEndOfSectionBanner(container, viewerEl) {
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
     banner.classList.toggle('visible', atBottom);
   };
-  container.addEventListener('scroll', onScroll, { passive: true });
+  // Use managed listener so it's cleaned up in destroyEpub()
+  state.scrollCleanup = addManagedScrollListener(container, onScroll);
 }
 
 /** Inject highlight CSS into the epub's iframe document. */

@@ -40,29 +40,29 @@ function tx(mode) {
   });
 }
 
+/** Wrap an IDB request in a Promise. */
+function idbReq(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 /** Get the knowledge level for a single word (0 if not stored). */
 export async function getLevel(language, word) {
   const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const req = store.get([language, word]);
-    req.onsuccess = () => resolve(req.result ? req.result.level : 0);
-    req.onerror = () => reject(req.error);
-  });
+  const result = await idbReq(store.get([language, word]));
+  return result ? result.level : 0;
 }
 
 /** Set the knowledge level for a word. Level 0 deletes the entry. */
 export async function setLevel(language, word, level) {
   const store = await tx('readwrite');
-  return new Promise((resolve, reject) => {
-    let req;
-    if (level === 0) {
-      req = store.delete([language, word]);
-    } else {
-      req = store.put({ language, word, level });
-    }
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
+  if (level === 0) {
+    await idbReq(store.delete([language, word]));
+  } else {
+    await idbReq(store.put({ language, word, level }));
+  }
 }
 
 /**
@@ -73,110 +73,92 @@ export async function getLevels(language, words) {
   const store = await tx('readonly');
   const map = new Map();
   const unique = [...new Set(words)];
-  await Promise.all(unique.map(w =>
-    new Promise((resolve, reject) => {
-      const req = store.get([language, w]);
-      req.onsuccess = () => {
-        map.set(w, req.result ? req.result.level : 0);
-        resolve();
-      };
-      req.onerror = () => reject(req.error);
-    })
-  ));
+  await Promise.all(unique.map(async w => {
+    const result = await idbReq(store.get([language, w]));
+    map.set(w, result ? result.level : 0);
+  }));
   return map;
 }
 
 /** Get vocabulary stats for a language. */
 export async function getStats(language) {
   const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const idx = store.index('by_language');
-    const req = idx.getAll(language);
-    req.onsuccess = () => {
-      const all = req.result;
-      resolve({
-        partial: all.filter(r => r.level === 1).length,
-        known: all.filter(r => r.level === 2).length,
-        total: all.length,
-      });
-    };
-    req.onerror = () => reject(req.error);
-  });
+  const all = await idbReq(store.index('by_language').getAll(language));
+  return {
+    partial: all.filter(r => r.level === 1).length,
+    known: all.filter(r => r.level === 2).length,
+    total: all.length,
+  };
 }
 
 /** Get all words + levels for a language. Returns [{word, level}, ...]. */
 export async function getAllWords(language) {
   const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const idx = store.index('by_language');
-    const req = idx.getAll(language);
-    req.onsuccess = () => resolve(req.result.map(r => ({ word: r.word, level: r.level })));
-    req.onerror = () => reject(req.error);
-  });
+  const all = await idbReq(store.index('by_language').getAll(language));
+  return all.map(r => ({ word: r.word, level: r.level }));
 }
 
 /**
  * Delete all stored words for a language.
+ * Uses a single readwrite transaction to prevent interleaving.
  * Returns the deleted entries for undo: [{language, word, level}, ...]
  */
 export async function deleteAllWords(language) {
-  const store = await tx('readonly');
-  const entries = await new Promise((resolve, reject) => {
-    const idx = store.index('by_language');
-    const req = idx.getAll(language);
-    req.onsuccess = () => resolve(req.result);
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const txn = db.transaction(STORE_NAME, 'readwrite');
+    const store = txn.objectStore(STORE_NAME);
+    const req = store.index('by_language').getAll(language);
+    req.onsuccess = () => {
+      const entries = req.result;
+      if (entries.length === 0) { resolve([]); return; }
+      for (const e of entries) {
+        store.delete([e.language, e.word]);
+      }
+      txn.oncomplete = () => resolve(entries.map(e => ({ language: e.language, word: e.word, level: e.level })));
+    };
     req.onerror = () => reject(req.error);
+    txn.onerror = () => reject(txn.error);
   });
-  if (entries.length === 0) return [];
-  const writeStore = await tx('readwrite');
-  await Promise.all(entries.map(e =>
-    new Promise((resolve, reject) => {
-      const req = writeStore.delete([e.language, e.word]);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    })
-  ));
-  return entries.map(e => ({ language: e.language, word: e.word, level: e.level }));
 }
 
 /**
  * Delete a specific list of words for a language.
+ * Uses a single readwrite transaction to prevent interleaving.
  * Returns the deleted entries that actually existed for undo.
  */
 export async function deleteWordsList(language, words) {
-  const store = await tx('readonly');
-  const deleted = [];
-  await Promise.all(words.map(w =>
-    new Promise((resolve, reject) => {
+  if (words.length === 0) return [];
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const txn = db.transaction(STORE_NAME, 'readwrite');
+    const store = txn.objectStore(STORE_NAME);
+    const deleted = [];
+    let lookupsDone = 0;
+
+    for (const w of words) {
       const req = store.get([language, w]);
       req.onsuccess = () => {
         if (req.result) deleted.push({ language, word: w, level: req.result.level });
-        resolve();
+        lookupsDone++;
+        if (lookupsDone === words.length) {
+          if (deleted.length === 0) { resolve([]); return; }
+          for (const e of deleted) {
+            store.delete([e.language, e.word]);
+          }
+          txn.oncomplete = () => resolve(deleted);
+        }
       };
       req.onerror = () => reject(req.error);
-    })
-  ));
-  if (deleted.length === 0) return [];
-  const writeStore = await tx('readwrite');
-  await Promise.all(deleted.map(e =>
-    new Promise((resolve, reject) => {
-      const req = writeStore.delete([e.language, e.word]);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    })
-  ));
-  return deleted;
+    }
+    txn.onerror = () => reject(txn.error);
+  });
 }
 
 /** Export all vocab for a language as JSON array. */
 export async function exportVocab(language) {
   const store = await tx('readonly');
-  return new Promise((resolve, reject) => {
-    const idx = store.index('by_language');
-    const req = idx.getAll(language);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  return idbReq(store.index('by_language').getAll(language));
 }
 
 /** Import vocab entries (array of {language, word, level}). Validates each entry. */
@@ -188,11 +170,5 @@ export async function importVocab(entries) {
   );
   if (valid.length === 0) return;
   const store = await tx('readwrite');
-  return Promise.all(valid.map(e =>
-    new Promise((resolve, reject) => {
-      const req = store.put(e);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    })
-  ));
+  await Promise.all(valid.map(e => idbReq(store.put(e))));
 }

@@ -20,12 +20,18 @@ function makeSectionDoc(bodyHtml) {
 
 function createMockSection(href, bodyHtml, index) {
   const doc = makeSectionDoc(bodyHtml);
-  return {
+  const section = {
     href,
     index,
-    load: vi.fn(async () => doc),
+    load: vi.fn(async () => {
+      // Simulate real epubjs: stores Document on section.document,
+      // returns xml.documentElement (root Element, NOT Document)
+      section.document = doc;
+      return doc.documentElement;
+    }),
     unload: vi.fn(),
   };
+  return section;
 }
 
 function createMockBook(sections, bookId = 'test-book') {
@@ -209,8 +215,11 @@ describe('vocab scan pipeline (real tokenizer)', () => {
     expect(result.size).toBe(0);
 
     // Fix the section for next attempt
-    const goodDoc = makeSectionDoc('<p>recovered</p>');
-    sections[0].load = vi.fn(async () => goodDoc);
+    sections[0].load = vi.fn(async () => {
+      const goodDoc = makeSectionDoc('<p>recovered</p>');
+      sections[0].document = goodDoc;
+      return goodDoc.documentElement;
+    });
 
     const retryResult = await getAllBookWords();
     // Should re-scan because empty result wasn't cached

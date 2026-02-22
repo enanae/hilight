@@ -9,6 +9,7 @@ import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 import { getLevel, setLevel, getLevels } from './vocab-store.js';
 import { lookupWord, hasDictionary } from './dictionary.js';
 import { state } from './app-state.js';
+import { escapeHtml } from './ui-utils.js';
 
 /** Level constants */
 export const LEVEL_UNKNOWN = 0;
@@ -257,8 +258,3 @@ function positionPopup(popup, anchor, doc) {
   });
 }
 
-function escapeHtml(str) {
-  const el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}

@@ -21,17 +21,24 @@ function makeSectionDoc(bodyHtml = '') {
 
 /**
  * Create a mock epub section returned by spine.get().
- * `load()` resolves to a jsdom document whose body contains `bodyHtml`.
+ * Simulates real epubjs behavior: section.load() stores the Document
+ * on section.document and returns xml.documentElement (an Element).
  */
 function createMockSection(href, bodyHtml = '', index = 0) {
   const doc = makeSectionDoc(bodyHtml);
-  return {
+  const section = {
     href,
     index,
-    load: vi.fn(async () => doc),
+    load: vi.fn(async () => {
+      // Real epubjs: stores Document on section.document,
+      // returns xml.documentElement (root Element, NOT Document)
+      section.document = doc;
+      return doc.documentElement;
+    }),
     unload: vi.fn(),
     _doc: doc, // exposed for assertions
   };
+  return section;
 }
 
 /**
@@ -681,7 +688,11 @@ describe('getAllBookWords', () => {
     expect(first.size).toBe(0);
 
     // Fix the section so the re-scan finds words
-    section.load = vi.fn(async () => makeSectionDoc('<p>recovered</p>'));
+    section.load = vi.fn(async () => {
+      const doc = makeSectionDoc('<p>recovered</p>');
+      section.document = doc;
+      return doc.documentElement;
+    });
 
     const second = await getAllBookWords();
     expect(second.size).toBeGreaterThan(0);
