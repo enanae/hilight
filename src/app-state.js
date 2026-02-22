@@ -25,6 +25,10 @@ export const state = {
   cachedBookId: null,
   cachedBookLang: null,
 
+  // Managed lifecycle — epub-adapter.js
+  eventScope: null,      // managed event listener scope for rendition
+  scrollCleanup: null,   // disposer for scroll listener
+
   // Popup — highlighter.js
   popupActive: false,
 
@@ -54,6 +58,8 @@ export function resetState() {
   state.currentBookId = null;
   state.currentOnStatsUpdate = null;
   state.languageVersion = 0;
+  state.eventScope = null;
+  state.scrollCleanup = null;
   state.cachedBookWords = null;
   state.cachedBookId = null;
   state.cachedBookLang = null;

@@ -81,6 +81,7 @@ import { getAllBookWords } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 import { state } from './app-state.js';
+import { escapeHtml, showUndoToast } from './ui-utils.js';
 
 const LEVEL_CLASSES = ['vb-unknown', 'vb-partial', 'vb-known'];
 const LEVEL_SYMBOLS = ['?', '~', '\u2713'];
@@ -461,15 +462,15 @@ function renderList() {
 
     if (isSingle) {
       const w = words[0];
-      html += `<div class="vb-word-row vb-flat-row" data-word="${esc(w.word)}">
-        <span class="vb-word-text">${esc(w.word)}</span>
+      html += `<div class="vb-word-row vb-flat-row" data-word="${escapeHtml(w.word)}">
+        <span class="vb-word-text">${escapeHtml(w.word)}</span>
         <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
       </div>`;
     } else {
-      html += `<div class="vb-group" data-stem="${esc(stemKey)}">
+      html += `<div class="vb-group" data-stem="${escapeHtml(stemKey)}">
         <div class="vb-group-header">
           <span class="vb-group-chevron"></span>
-          <span class="vb-group-stem">${esc(stemKey)}</span>
+          <span class="vb-group-stem">${escapeHtml(stemKey)}</span>
           <span class="vb-group-count">${words.length}</span>
           <span class="vb-group-actions">
             <button class="vb-group-mark vb-partial" data-level="${LEVEL_PARTIAL}" title="Mark group as learning">~</button>
@@ -478,8 +479,8 @@ function renderList() {
         </div>
         <div class="vb-group-body">`;
       for (const w of words) {
-        html += `<div class="vb-word-row" data-word="${esc(w.word)}">
-          <span class="vb-word-text">${esc(w.word)}</span>
+        html += `<div class="vb-word-row" data-word="${escapeHtml(w.word)}">
+          <span class="vb-word-text">${escapeHtml(w.word)}</span>
           <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
         </div>`;
       }
@@ -557,31 +558,6 @@ function updateGroupRows(stemKey) {
       }
     });
   }
-}
-
-function showUndoToast(message, onUndo) {
-  const existing = document.querySelector('.undo-toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = 'undo-toast';
-  toast.innerHTML = `<span>${message}</span><button class="undo-btn">Undo</button>`;
-  const btn = toast.querySelector('.undo-btn');
-  let dismissed = false;
-  btn.addEventListener('click', async () => {
-    if (dismissed) return;
-    dismissed = true;
-    toast.remove();
-    try {
-      await onUndo();
-    } catch (err) {
-      console.error('[vocab] Undo failed:', err);
-    }
-  });
-  document.getElementById('app').appendChild(toast);
-  setTimeout(() => {
-    dismissed = true;
-    toast.remove();
-  }, 6000);
 }
 
 function updateRowBadge(word, level) {
@@ -663,9 +639,3 @@ export function resetBookState() {
 }
 
 // ── Utilities ────────────────────────────────────────────────────────
-
-function esc(str) {
-  const el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}
