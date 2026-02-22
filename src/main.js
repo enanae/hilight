@@ -489,6 +489,11 @@ async function openBook(file) {
     document.getElementById('upload-area').classList.add('hidden');
     document.getElementById('reader-area').classList.add('open');
     showReadingHint();
+
+    // On mobile, auto-enter focus mode for maximum reading area
+    if (window.matchMedia('(max-width: 600px)').matches) {
+      document.getElementById('app').classList.add('focus-mode');
+    }
   } catch (err) {
     console.error('Failed to open epub:', err);
     // Clean up partial state without touching UI (upload area stays visible)
