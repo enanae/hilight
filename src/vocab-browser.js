@@ -41,6 +41,7 @@
  *     bookWordSet (scan cache), activeFilter
  *   RECEIVES from caller (main.js):
  *     bookId — passed explicitly, not queried from epub-reader.
+ *     getIframeDocument — callback for accessing reader iframe DOM.
  *     checkbox disabled/enabled, status text derived from bookId.
  *
  * closePanel():    Only hides the panel. All state preserved.
@@ -76,7 +77,7 @@
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  */
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
-import { getAllBookWords, getIframeDocument } from './epub-reader.js';
+import { getAllBookWords } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
 
@@ -94,6 +95,7 @@ let inBookOnly = false;
 let lastBookId = null;
 let searchQuery = '';
 let onStatsUpdate = null;
+let iframeDocGetter = null; // () => Document|null — injected by caller
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -118,7 +120,7 @@ function adjustDbEntry(word, level) {
 
 /** Update a single word's spans in the reader iframe. */
 function syncReaderSpans(word, level) {
-  const iframeDoc = getIframeDocument();
+  const iframeDoc = iframeDocGetter ? iframeDocGetter() : null;
   if (!iframeDoc) return;
   iframeDoc.querySelectorAll(`.hl-word[data-word="${CSS.escape(word)}"][data-language="${CSS.escape(currentLanguage)}"]`)
     .forEach(el => {
@@ -129,7 +131,7 @@ function syncReaderSpans(word, level) {
 
 /** Bulk-update all reader spans to reflect current dbWords state. */
 function syncAllReaderSpans() {
-  const iframeDoc = getIframeDocument();
+  const iframeDoc = iframeDocGetter ? iframeDocGetter() : null;
   if (!iframeDoc) return;
   const levelMap = new Map();
   for (const w of dbWords) levelMap.set(w.word, w.level);
@@ -261,9 +263,10 @@ function ensurePanel() {
  * options.bookId parameter. This avoids cross-module state queries
  * that are invisible to tests and hard to debug at runtime.
  */
-export async function openPanel(language, { bookId = null, onStatsUpdate: statsCallback = null } = {}) {
+export async function openPanel(language, { bookId = null, onStatsUpdate: statsCallback = null, getIframeDocument: getIframeDocFn = null } = {}) {
   currentLanguage = language;
   onStatsUpdate = statsCallback || null;
+  iframeDocGetter = getIframeDocFn || null;
   ensurePanel();
 
   document.getElementById('toc-panel')?.classList.remove('open');

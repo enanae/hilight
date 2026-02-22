@@ -18,7 +18,6 @@ vi.mock('../src/epub-reader.js', () => ({
   getIframeDocument: vi.fn(() => null),
   destroyEpub: vi.fn(),
   setLanguage: vi.fn(async () => {}),
-  getBookId: vi.fn(() => 'test-book-id'),
 }));
 
 vi.mock('../src/vocab-store.js', () => ({
@@ -39,7 +38,7 @@ vi.mock('../src/dictionary.js', () => ({
 }));
 
 vi.mock('../src/highlighter.js', () => ({
-  popupActive: false,
+  isPopupActive: vi.fn(() => false),
   markAllKnown: vi.fn(async () => []),
   restoreWordLevels: vi.fn(async () => {}),
 }));
@@ -54,12 +53,11 @@ vi.mock('../src/style.css', () => ({}));
 
 // ── Import the mocked modules so we can inspect calls ───────────────────
 
-import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHref, getBookId } from '../src/epub-reader.js';
+import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHref } from '../src/epub-reader.js';
 import { getStats, exportVocab, importVocab } from '../src/vocab-store.js';
 import { saveDictSettings, loadDictSettings, getActiveProviderId } from '../src/dictionary.js';
-import { markAllKnown, restoreWordLevels } from '../src/highlighter.js';
+import { isPopupActive, markAllKnown, restoreWordLevels } from '../src/highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from '../src/vocab-browser.js';
-import * as highlighterModule from '../src/highlighter.js';
 
 // ── Bootstrap: create #app then dynamically import main.js ──────────────
 
@@ -277,25 +275,15 @@ describe('Navigation Buttons', () => {
     expect(nextPage).toHaveBeenCalledTimes(1);
   });
 
-  it('suppresses navigation when popupActive is true', () => {
-    // Temporarily set popupActive to true
-    Object.defineProperty(highlighterModule, 'popupActive', {
-      value: true,
-      writable: true,
-      configurable: true,
-    });
+  it('suppresses navigation when isPopupActive returns true', () => {
+    isPopupActive.mockReturnValue(true);
 
     document.getElementById('btn-prev').click();
     document.getElementById('btn-next').click();
     expect(prevPage).not.toHaveBeenCalled();
     expect(nextPage).not.toHaveBeenCalled();
 
-    // Restore
-    Object.defineProperty(highlighterModule, 'popupActive', {
-      value: false,
-      writable: true,
-      configurable: true,
-    });
+    isPopupActive.mockReturnValue(false);
   });
 });
 
@@ -616,12 +604,14 @@ describe('Vocab Panel', () => {
     expect(toggleVocabPanel).toHaveBeenCalled();
   });
 
-  it('passes bookId and onStatsUpdate options to togglePanel', () => {
+  it('passes bookId, onStatsUpdate, and getIframeDocument options to togglePanel', () => {
     document.getElementById('btn-vocab').click();
     const args = toggleVocabPanel.mock.calls[0];
     expect(args[1]).toHaveProperty('bookId');
     expect(args[1]).toHaveProperty('onStatsUpdate');
+    expect(args[1]).toHaveProperty('getIframeDocument');
     expect(typeof args[1].onStatsUpdate).toBe('function');
+    expect(typeof args[1].getIframeDocument).toBe('function');
   });
 });
 

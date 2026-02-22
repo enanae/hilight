@@ -1,8 +1,8 @@
 import './style.css';
-import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage, getBookId } from './epub-reader.js';
+import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
-import { popupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
+import { isPopupActive, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 
 const LANGUAGES = [
@@ -202,15 +202,15 @@ function bindEvents() {
 
   // Navigation — suppressed while definition popup is showing
   document.getElementById('btn-prev').addEventListener('click', () => {
-    if (!popupActive) prevPage();
+    if (!isPopupActive()) prevPage();
   });
   document.getElementById('btn-next').addEventListener('click', () => {
-    if (!popupActive) nextPage();
+    if (!isPopupActive()) nextPage();
   });
 
   // Keyboard shortcuts — suppressed while popup showing or typing in inputs
   document.addEventListener('keydown', (e) => {
-    if (popupActive) return;
+    if (isPopupActive()) return;
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
@@ -235,7 +235,7 @@ function bindEvents() {
       case 'v':
       case 'V':
         if (!e.ctrlKey && !e.metaKey) {
-          toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats });
+          toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats, getIframeDocument });
         }
         break;
       case 'w':
@@ -261,7 +261,7 @@ function bindEvents() {
 
   // Vocab browser
   document.getElementById('btn-vocab').addEventListener('click', () => {
-    toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats });
+    toggleVocabPanel(currentLanguage, { bookId: currentBookId, onStatsUpdate: updateStats, getIframeDocument });
   });
 
   // Mark all words on page as known (with undo)
@@ -303,10 +303,10 @@ async function openBook(file) {
       },
     });
 
-    // Capture book identity immediately after successful load.
-    // This is the single source of truth for "is a book open?"
-    // and is passed explicitly to any module that needs to know.
-    currentBookId = getBookId();
+    // Set book identity from the file itself — no cross-module getter needed.
+    // file.name + file.size is unique enough for cache invalidation and
+    // avoids depending on epub-reader's internal state or epubjs's key() method.
+    currentBookId = `${file.name}:${file.size}`;
 
     // Load TOC (with nested sub-items)
     const toc = await getToc();

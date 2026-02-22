@@ -17,7 +17,12 @@ export const LEVEL_KNOWN = 2;
 const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
 
 /** True when a definition popup is visible — all other interactions should be suppressed. */
-export let popupActive = false;
+let popupActive = false;
+
+/** Getter for popup state — called by epub-reader and main to suppress interactions. */
+export function isPopupActive() {
+  return popupActive;
+}
 
 /** Reset popup state. Call when iframe content is replaced (chapter nav). */
 export function resetPopupState() {
