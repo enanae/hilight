@@ -66,10 +66,10 @@ function renderApp() {
       </div>
     </header>
 
-    <div class="stats-bar" id="stats-bar">
-      <span id="stat-unknown" class="stat stat-unknown" title="Unknown words on this page">? 0</span>
-      <span id="stat-partial" class="stat stat-partial" title="Learning words on this page">~ 0</span>
-      <span id="stat-known" class="stat stat-known" title="Known words on this page">&#10003; 0</span>
+    <div class="stats-bar hidden" id="stats-bar">
+      <span id="stat-unknown" class="stat stat-unknown" title="Unknown words on this page">? 0 <span class="stat-label">unknown</span></span>
+      <span id="stat-partial" class="stat stat-partial" title="Learning words on this page">~ 0 <span class="stat-label">learning</span></span>
+      <span id="stat-known" class="stat stat-known" title="Known words on this page">&#10003; 0 <span class="stat-label">known</span></span>
       <span id="stat-saved" class="stat stat-saved" title="Total words saved across all pages">&#128218; 0 saved</span>
     </div>
 
@@ -77,8 +77,8 @@ function renderApp() {
       <div id="upload-area" class="upload-area">
         <div class="upload-content">
           <div class="upload-icon">&#128214;</div>
-          <h2>Drop an epub file here</h2>
-          <p>or click to browse</p>
+          <h2>Open an epub file</h2>
+          <p>tap to browse or drop a file</p>
           <input type="file" id="file-input" accept=".epub,application/epub+zip,application/octet-stream" hidden />
           <div class="upload-hint">
             <p>Every word starts highlighted. <strong>Tap</strong> a word to cycle:</p>
@@ -88,7 +88,7 @@ function renderApp() {
             &#8594;
             <span class="demo-word demo-known">known</span>
             &#8594; ...
-            <p class="hint-secondary"><strong>Long-press</strong> or <strong>double-click</strong> any word for a dictionary definition.</p>
+            <p class="hint-secondary"><strong>Long-press</strong> or <strong>double-tap</strong> any word for a dictionary definition.</p>
           </div>
           <p class="upload-gutenberg">Need an epub? Browse free books at <a href="https://www.gutenberg.org/browse/languages/" target="_blank" rel="noopener">Project Gutenberg</a></p>
         </div>
@@ -96,7 +96,7 @@ function renderApp() {
 
       <div id="reader-area" class="reader-area">
         <div id="focus-bar" class="focus-bar">
-          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#9776;<span class="btn-label"> Menu</span></button>
+          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#8592;<span class="btn-label"> Menu</span></button>
           <button id="btn-focus-vocab" class="toolbar-btn" title="Vocabulary (V)">&#128218;<span class="btn-label"> Vocab</span></button>
         </div>
         <div class="reader-toolbar">
@@ -176,44 +176,62 @@ function renderApp() {
       <div class="modal-backdrop"></div>
       <div class="modal-content help-content">
         <div class="modal-header">
-          <h2>Keyboard Shortcuts</h2>
+          <h2>Help</h2>
           <button id="btn-close-help" class="toolbar-btn">&#10005;</button>
         </div>
         <div class="modal-body">
-          <div class="help-columns">
-            <div class="help-section">
-              <h3>Reading</h3>
-              <dl class="help-keys">
-                <dt>&#8592; &#8594;</dt><dd>Previous / next page</dd>
-                <dt>Space</dt><dd>Next page</dd>
-                <dt>Shift+Space</dt><dd>Previous page</dd>
-                <dt>Tab / Enter</dt><dd>Enter review mode</dd>
-              </dl>
-            </div>
-            <div class="help-section">
-              <h3>Review Mode</h3>
-              <dl class="help-keys">
-                <dt>n / N</dt><dd>Next / previous word</dd>
-                <dt>1 / 2 / 3</dt><dd>Unknown / partial / known</dd>
-                <dt>d / Enter</dt><dd>Show definition</dd>
-                <dt>Space</dt><dd>Apply last grade + next</dd>
-                <dt>a</dt><dd>Toggle all / unlearned</dd>
-                <dt>Esc</dt><dd>Exit review mode</dd>
-              </dl>
-            </div>
-            <div class="help-section">
-              <h3>General</h3>
-              <dl class="help-keys">
-                <dt>T</dt><dd>Table of contents</dd>
-                <dt>K</dt><dd>Mark page as known</dd>
-                <dt>V</dt><dd>Vocabulary panel</dd>
-                <dt>F</dt><dd>Focus mode</dd>
-                <dt>W</dt><dd>Close book</dd>
-                <dt>?</dt><dd>This help</dd>
-              </dl>
+          <div class="help-touch">
+            <h3>How to use</h3>
+            <dl class="help-keys">
+              <dt>Tap a word</dt><dd>Cycle: unknown &#8594; learning &#8594; known</dd>
+              <dt>Long-press</dt><dd>Show dictionary definition</dd>
+              <dt>Double-tap</dt><dd>Show dictionary definition</dd>
+              <dt>&#8592; &#8594; buttons</dt><dd>Previous / next page</dd>
+            </dl>
+            <h3>Toolbar</h3>
+            <dl class="help-keys">
+              <dt>&#9776; Contents</dt><dd>Open table of contents</dd>
+              <dt>&#10003; Page known</dt><dd>Mark all words on page as known</dd>
+              <dt>&#128218; Vocab</dt><dd>Browse saved vocabulary</dd>
+              <dt>&#9673; Focus</dt><dd>Hide menus for distraction-free reading</dd>
+            </dl>
+          </div>
+          <div class="help-keyboard">
+            <div class="help-columns">
+              <div class="help-section">
+                <h3>Reading</h3>
+                <dl class="help-keys">
+                  <dt>&#8592; &#8594;</dt><dd>Previous / next page</dd>
+                  <dt>Space</dt><dd>Next page</dd>
+                  <dt>Shift+Space</dt><dd>Previous page</dd>
+                  <dt>Tab / Enter</dt><dd>Enter review mode</dd>
+                </dl>
+              </div>
+              <div class="help-section">
+                <h3>Review Mode</h3>
+                <dl class="help-keys">
+                  <dt>n / N</dt><dd>Next / previous word</dd>
+                  <dt>1 / 2 / 3</dt><dd>Unknown / partial / known</dd>
+                  <dt>d / Enter</dt><dd>Show definition</dd>
+                  <dt>Space</dt><dd>Apply last grade + next</dd>
+                  <dt>a</dt><dd>Toggle all / unlearned</dd>
+                  <dt>Esc</dt><dd>Exit review mode</dd>
+                </dl>
+              </div>
+              <div class="help-section">
+                <h3>General</h3>
+                <dl class="help-keys">
+                  <dt>T</dt><dd>Table of contents</dd>
+                  <dt>K</dt><dd>Mark page as known</dd>
+                  <dt>V</dt><dd>Vocabulary panel</dd>
+                  <dt>F</dt><dd>Focus mode</dd>
+                  <dt>W</dt><dd>Close book</dd>
+                  <dt>?</dt><dd>This help</dd>
+                </dl>
+              </div>
             </div>
           </div>
-          <p class="help-hint">Click a word to cycle its level. Long-press (hold) or double-click for definition.</p>
+          <p class="help-hint">Click a word to cycle its level. Long-press or double-tap for definition.</p>
         </div>
       </div>
     </div>
@@ -488,6 +506,7 @@ async function openBook(file) {
     // Show reader ONLY after successful load
     document.getElementById('upload-area').classList.add('hidden');
     document.getElementById('reader-area').classList.add('open');
+    document.getElementById('stats-bar').classList.remove('hidden');
     showReadingHint();
 
     // On mobile, auto-enter focus mode for maximum reading area
@@ -549,6 +568,7 @@ function closeBook() {
   document.getElementById('app').classList.remove('focus-mode');
   document.getElementById('reader-area').classList.remove('open');
   document.getElementById('upload-area').classList.remove('hidden');
+  document.getElementById('stats-bar').classList.add('hidden');
   document.getElementById('toc-panel').classList.remove('open');
   document.getElementById('toc-list').innerHTML = '';
 }
@@ -581,9 +601,9 @@ async function updateStats() {
   const unknownOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-unknown').length : 0;
   const partialOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-partial').length : 0;
   const knownOnPage = iframeDoc ? iframeDoc.querySelectorAll('.hl-word.hl-known').length : 0;
-  document.getElementById('stat-unknown').textContent = `? ${unknownOnPage}`;
-  document.getElementById('stat-partial').textContent = `~ ${partialOnPage}`;
-  document.getElementById('stat-known').textContent = `\u2713 ${knownOnPage}`;
+  document.getElementById('stat-unknown').innerHTML = `? ${unknownOnPage} <span class="stat-label">unknown</span>`;
+  document.getElementById('stat-partial').innerHTML = `~ ${partialOnPage} <span class="stat-label">learning</span>`;
+  document.getElementById('stat-known').innerHTML = `\u2713 ${knownOnPage} <span class="stat-label">known</span>`;
   // DB total: how many words the user has saved across all pages
   const stats = await getStats(state.currentLanguage);
   document.getElementById('stat-saved').textContent = `\uD83D\uDCDA ${stats.total} saved`;

@@ -159,6 +159,14 @@ html, body {
   font-weight: 600;
 }
 
+.stats-bar.hidden { display: none; }
+
+.stat-label {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
 .stat-unknown { color: var(--unknown); background: var(--unknown-bg); }
 .stat-partial { color: var(--partial); background: var(--partial-bg); }
 .stat-known { color: var(--known); background: var(--known-bg); }
@@ -990,6 +998,24 @@ html, body {
   margin-bottom: 6px;
 }
 
+/* Touch help section — hidden on desktop, shown on mobile */
+.help-touch {
+  display: none;
+}
+
+.help-touch h3 {
+  color: var(--accent);
+  font-size: 14px;
+  margin-bottom: 8px;
+  margin-top: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.help-touch h3:first-child {
+  margin-top: 0;
+}
+
 .help-hint {
   margin-top: 16px;
   font-size: 13px;
@@ -1188,8 +1214,8 @@ html, body {
   }
 
   .icon-btn {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     font-size: 14px;
   }
 
@@ -1213,7 +1239,7 @@ html, body {
   }
 
   .nav-btn {
-    width: 36px;
+    width: 44px;
     font-size: 22px;
   }
 
@@ -1234,6 +1260,11 @@ html, body {
   .toolbar-btn {
     padding: 4px 8px;
     font-size: 12px;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .btn-label {
@@ -1245,7 +1276,14 @@ html, body {
     display: none !important;
   }
 
-  /* Hide low-frequency actions on mobile toolbar; accessible via exit focus → full UI */
+  /* On mobile, hide header + stats when reading — the toolbar has everything needed.
+     Prevents the "wall of chrome" when exiting focus mode. */
+  #app:has(.reader-area.open) .app-header,
+  #app:has(.reader-area.open) .stats-bar {
+    display: none;
+  }
+
+  /* Hide low-frequency actions on mobile toolbar; accessible via close book → upload screen */
   .book-title,
   .btn-close-book,
   #btn-open-book {
@@ -1259,6 +1297,16 @@ html, body {
 
   .help-columns {
     grid-template-columns: 1fr;
+  }
+
+  /* On mobile: show touch instructions, hide keyboard shortcuts */
+  .help-touch {
+    display: block;
+  }
+
+  .help-keyboard,
+  .help-hint {
+    display: none;
   }
 
   .review-bar {
