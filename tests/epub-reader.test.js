@@ -651,6 +651,40 @@ describe('getAllBookWords', () => {
     expect(tokenize).toHaveBeenCalled();
     expect(normalizeWord).toHaveBeenCalled();
   });
+
+  it('returns empty Set when all sections fail to load', async () => {
+    const bad1 = createMockSection('ch1.xhtml', '', 0);
+    bad1.load = vi.fn(async () => { throw new Error('fail'); });
+    const bad2 = createMockSection('ch2.xhtml', '', 1);
+    bad2.load = vi.fn(async () => { throw new Error('fail'); });
+
+    mockBook = createMockBook({ sections: [bad1, bad2] });
+    const viewer = document.createElement('div');
+    await loadEpub(new ArrayBuffer(8), viewer, 'en');
+
+    const words = await getAllBookWords();
+    expect(words).toBeInstanceOf(Set);
+    expect(words.size).toBe(0);
+  });
+
+  it('does not cache empty scan results', async () => {
+    const section = createMockSection('ch1.xhtml', '', 0);
+    section.load = vi.fn(async () => { throw new Error('fail'); });
+
+    mockBook = createMockBook({ sections: [section] });
+    const viewer = document.createElement('div');
+    await loadEpub(new ArrayBuffer(8), viewer, 'en');
+
+    const first = await getAllBookWords();
+    expect(first.size).toBe(0);
+
+    // Fix the section so the re-scan finds words
+    section.load = vi.fn(async () => makeSectionDoc('<p>recovered</p>'));
+
+    const second = await getAllBookWords();
+    expect(second.size).toBeGreaterThan(0);
+    expect(second.has('recovered')).toBe(true);
+  });
 });
 
 // ===========================================================================

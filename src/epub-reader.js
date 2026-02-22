@@ -383,11 +383,13 @@ export function getIframeDocument() {
 export async function getAllBookWords(onProgress) {
   if (!currentBook) return null;
   const bookId = currentBook.key();
-  if (cachedBookId === bookId && cachedBookLang === currentLanguage && cachedBookWords) return cachedBookWords;
+  if (cachedBookId === bookId && cachedBookLang === currentLanguage && cachedBookWords && cachedBookWords.size > 0) return cachedBookWords;
 
   const locale = langToLocale(currentLanguage);
   const words = new Set();
   const items = currentBook.spine.items;
+  let loadedCount = 0;
+  let failedCount = 0;
 
   for (let i = 0; i < items.length; i++) {
     try {
@@ -406,15 +408,22 @@ export async function getAllBookWords(onProgress) {
         }
       }
       section.unload();
-    } catch {
-      // Skip corrupt/missing sections
+      loadedCount++;
+    } catch (err) {
+      failedCount++;
+      console.warn(`[scan] section ${i} failed:`, err);
     }
     if (onProgress) onProgress((i + 1) / items.length);
   }
 
-  cachedBookWords = words;
-  cachedBookId = bookId;
-  cachedBookLang = currentLanguage;
+  console.log(`[scan] ${items.length} spine items: ${loadedCount} loaded, ${failedCount} failed, ${words.size} unique words`);
+
+  // Only cache non-empty results — empty scans may be transient failures
+  if (words.size > 0) {
+    cachedBookWords = words;
+    cachedBookId = bookId;
+    cachedBookLang = currentLanguage;
+  }
   return words;
 }
 
