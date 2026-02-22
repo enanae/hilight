@@ -167,6 +167,7 @@ import {
 import { highlightContainer, resetPopupState, isPopupActive, handleWordTap } from '../src/highlighter.js';
 import { tokenize, normalizeWord, langToLocale } from '../src/tokenizer.js';
 import ePub from 'epubjs';
+import { resetState } from '../src/app-state.js';
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -174,6 +175,7 @@ import ePub from 'epubjs';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetState();
   destroyEpub(); // reset internal state between tests
   mockBook = createMockBook();
 });

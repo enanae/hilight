@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:integration": "vitest run tests/integration/",
     "test:watch": "vitest"
   },
   "license": "MIT",

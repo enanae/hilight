@@ -8,6 +8,7 @@
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
 import { getLevel, setLevel, getLevels } from './vocab-store.js';
 import { lookupWord, hasDictionary } from './dictionary.js';
+import { state } from './app-state.js';
 
 /** Level constants */
 export const LEVEL_UNKNOWN = 0;
@@ -16,17 +17,14 @@ export const LEVEL_KNOWN = 2;
 
 const LEVEL_CLASSES = ['hl-unknown', 'hl-partial', 'hl-known'];
 
-/** True when a definition popup is visible — all other interactions should be suppressed. */
-let popupActive = false;
-
 /** Getter for popup state — called by epub-reader and main to suppress interactions. */
 export function isPopupActive() {
-  return popupActive;
+  return state.popupActive;
 }
 
 /** Reset popup state. Call when iframe content is replaced (chapter nav). */
 export function resetPopupState() {
-  popupActive = false;
+  state.popupActive = false;
 }
 
 /**
@@ -184,7 +182,7 @@ async function showDefinition(anchor, language, word) {
   popup.className = 'hl-popup';
   popup.innerHTML = '<div class="hl-popup-loading">Looking up...</div>';
 
-  popupActive = true;
+  state.popupActive = true;
 
   doc.body.appendChild(popup);
   positionPopup(popup, anchor, doc);
@@ -219,8 +217,8 @@ async function showDefinition(anchor, language, word) {
   //
   // IMPORTANT: Do NOT call preventDefault/stopPropagation here — that
   // blocks all touch event propagation including scroll gestures.
-  // Instead, defer setting popupActive=false so word-tap handlers
-  // (which check popupActive) ignore this same event cycle.
+  // Instead, defer setting state.popupActive=false so word-tap handlers
+  // (which check state.popupActive) ignore this same event cycle.
   const showTime = Date.now();
   const DISMISS_GUARD_MS = 400;
   const dismiss = (e) => {
@@ -230,9 +228,9 @@ async function showDefinition(anchor, language, word) {
     popup.remove();
     doc.removeEventListener('click', dismiss, true);
     doc.removeEventListener('touchstart', dismiss, true);
-    // Defer popupActive reset so that word-tap handlers still see
-    // popupActive=true for this event and ignore it.
-    setTimeout(() => { popupActive = false; }, 0);
+    // Defer state.popupActive reset so that word-tap handlers still see
+    // state.popupActive=true for this event and ignore it.
+    setTimeout(() => { state.popupActive = false; }, 0);
   };
   doc.addEventListener('click', dismiss, true);
   doc.addEventListener('touchstart', dismiss, true);
