@@ -117,6 +117,9 @@ function renderApp() {
           <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
           <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
         </div>
+        <div id="reading-hint" class="reading-hint">
+          <kbd>Tab</kbd> review words &middot; <kbd>?</kbd> shortcuts
+        </div>
       </div>
 
       <div id="toc-panel" class="toc-panel">
@@ -445,10 +448,18 @@ async function openBook(file) {
   const viewer = document.getElementById('epub-viewer');
 
   try {
+    let openedTocForEmpty = false;
     await loadEpub(file, viewer, state.currentLanguage, {
       onStatsUpdate: updateStats,
       onBookLoaded: (meta) => {
         document.getElementById('book-title').textContent = meta.title;
+      },
+      onEmptySection: () => {
+        // First empty section (e.g. cover page) — open TOC so user can navigate
+        if (!openedTocForEmpty) {
+          openedTocForEmpty = true;
+          document.getElementById('toc-panel').classList.add('open');
+        }
       },
     });
 
@@ -460,6 +471,7 @@ async function openBook(file) {
     // Show reader ONLY after successful load
     document.getElementById('upload-area').classList.add('hidden');
     document.getElementById('reader-area').classList.add('open');
+    showReadingHint();
   } catch (err) {
     console.error('Failed to open epub:', err);
     // Clean up partial state without touching UI (upload area stays visible)
@@ -507,7 +519,7 @@ function renderTocItems(items, depth) {
 function closeBook() {
   state.currentBookId = null;
   // Cleanup may throw (e.g. partial init) — catch each so UI reset ALWAYS runs
-  try { exitReviewMode(); hideReviewBar(); } catch (_) { /* ignore */ }
+  try { exitReviewMode(); hideReviewBar(); hideReadingHint(); } catch (_) { /* ignore */ }
   try { destroyEpub(); } catch (err) { console.error('[hilight] destroyEpub failed:', err); }
   try { closeVocabPanel(); } catch (err) { console.error('[hilight] closeVocabPanel failed:', err); }
   try { resetVocabBookState(); } catch (err) { console.error('[hilight] resetVocabBookState failed:', err); }
@@ -642,12 +654,24 @@ function showDefForFocused() {
 function showReviewBar() {
   const bar = document.getElementById('review-bar');
   if (bar) bar.classList.add('visible');
+  hideReadingHint();
   updateReviewBarFilter();
 }
 
 function hideReviewBar() {
   const bar = document.getElementById('review-bar');
   if (bar) bar.classList.remove('visible');
+  showReadingHint();
+}
+
+function showReadingHint() {
+  const hint = document.getElementById('reading-hint');
+  if (hint) hint.classList.add('visible');
+}
+
+function hideReadingHint() {
+  const hint = document.getElementById('reading-hint');
+  if (hint) hint.classList.remove('visible');
 }
 
 function updateReviewBarFilter() {

@@ -99,6 +99,11 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
       hideLoadingOverlay(viewerEl);
     }
 
+    // Notify caller if section has no highlightable words (e.g. cover page)
+    if (doc.querySelectorAll('.hl-word').length === 0 && options.onEmptySection) {
+      options.onEmptySection();
+    }
+
     // Resume review mode after section change if pending
     if (state.reviewPendingResume) {
       state.reviewPendingResume = false;
@@ -112,14 +117,6 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
   setupWordTapHandler(state.eventScope, state.currentOnStatsUpdate);
 
   await rendition.display();
-
-  // Auto-skip empty initial sections (e.g. cover pages, title pages with only images).
-  // Try advancing up to 3 times to find a section with actual text content.
-  for (let skip = 0; skip < 3; skip++) {
-    const doc = getIframeDocument();
-    if (doc && doc.querySelectorAll('.hl-word').length > 0) break;
-    await rendition.next();
-  }
 
   // After display, fix the epub-container for iOS momentum scrolling
   // and add a scroll-to-bottom indicator.

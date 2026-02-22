@@ -56,7 +56,7 @@ function createMockRendition() {
   });
   container.scrollBy = vi.fn(({ top }) => { container.scrollTop += top; });
 
-  const iframeDoc = makeSectionDoc('<p><span class="hl-word hl-unknown" data-word="hello" data-level="0" data-language="en">hello</span></p>');
+  const iframeDoc = makeSectionDoc('<p>iframe content</p>');
 
   const rendition = {
     display:  vi.fn(async () => {}),
@@ -244,6 +244,38 @@ describe('destroyEpub', () => {
     // After destroy, getToc returns [] (no book), confirming state is reset
     const toc = await getToc();
     expect(toc).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// 1b. onEmptySection callback
+// ===========================================================================
+
+describe('onEmptySection callback', () => {
+  it('fires when the content hook finds no .hl-word spans', async () => {
+    const viewer = document.createElement('div');
+    const onEmptySection = vi.fn();
+    await loadEpub(new ArrayBuffer(8), viewer, 'en', { onEmptySection });
+
+    // The content hook is registered but not auto-invoked by our mock.
+    // Simulate it: get the registered hook and call it with a doc that has no words.
+    const hookFn = mockBook._rendition.hooks.content.register.mock.calls[0][0];
+    const emptyDoc = makeSectionDoc('<p>cover image only</p>');
+    await hookFn({ document: emptyDoc });
+
+    expect(onEmptySection).toHaveBeenCalled();
+  });
+
+  it('does not fire when the section has words', async () => {
+    const viewer = document.createElement('div');
+    const onEmptySection = vi.fn();
+    await loadEpub(new ArrayBuffer(8), viewer, 'en', { onEmptySection });
+
+    const hookFn = mockBook._rendition.hooks.content.register.mock.calls[0][0];
+    const docWithWords = makeSectionDoc('<p><span class="hl-word">hello</span></p>');
+    await hookFn({ document: docWithWords });
+
+    expect(onEmptySection).not.toHaveBeenCalled();
   });
 });
 
