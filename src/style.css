@@ -339,31 +339,9 @@ html, body {
   color: var(--text);
 }
 
-.reader-nav {
-  display: flex;
-  flex: 1;
-  min-height: 0; /* allow flex child to shrink below content size */
-  overflow: hidden;
-}
-
-.nav-btn {
-  width: 48px;
-  flex-shrink: 0;
-  border: none;
-  background: var(--surface);
-  cursor: pointer;
-  font-size: 28px;
-  color: var(--text-muted);
-  transition: all 0.15s;
-}
-
-.nav-btn:hover {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
 .epub-viewer {
   flex: 1;
+  min-height: 0; /* allow flex child to shrink below content size */
   overflow: hidden;
   background: var(--surface-raised);
 }
@@ -1055,15 +1033,14 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
-/* === End-of-Section Banner === */
-.hl-end-banner {
+/* === Chapter Navigation Banners === */
+.hl-end-banner,
+.hl-start-banner {
   position: absolute;
-  bottom: 0;
   left: 0;
   right: 0;
   text-align: center;
   padding: 12px;
-  background: linear-gradient(transparent, var(--surface-raised) 40%);
   color: var(--accent);
   font-weight: 600;
   font-size: 14px;
@@ -1074,12 +1051,24 @@ html, body {
   z-index: 10;
 }
 
-.hl-end-banner.visible {
+.hl-end-banner {
+  bottom: 0;
+  background: linear-gradient(transparent, var(--surface-raised) 40%);
+}
+
+.hl-start-banner {
+  top: 0;
+  background: linear-gradient(var(--surface-raised) 40%, transparent);
+}
+
+.hl-end-banner.visible,
+.hl-start-banner.visible {
   opacity: 1;
   pointer-events: auto;
 }
 
-.hl-end-banner:hover {
+.hl-end-banner:hover,
+.hl-start-banner:hover {
   color: #c084fc;
 }
 
@@ -1238,11 +1227,6 @@ html, body {
     font-size: 14px;
   }
 
-  .nav-btn {
-    width: 44px;
-    font-size: 22px;
-  }
-
   .upload-content {
     padding: 20px;
   }
@@ -1251,28 +1235,29 @@ html, body {
     font-size: 48px;
   }
 
-  /* Reader toolbar: tighter on mobile, icon-only buttons */
+  /* Reader toolbar: tighter on mobile, labels visible */
   .reader-toolbar {
     padding: 6px 8px;
     gap: 6px;
+    flex-wrap: wrap;
   }
 
   .toolbar-btn {
     padding: 4px 8px;
     font-size: 12px;
     min-height: 44px;
-    min-width: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .btn-label {
-    display: none;
-  }
-
   /* Reading hint shows keyboard shortcuts — useless on touch devices */
   .reading-hint {
+    display: none !important;
+  }
+
+  /* Review bar shows keyboard shortcuts — useless on touch devices */
+  .review-bar {
     display: none !important;
   }
 
@@ -1283,9 +1268,8 @@ html, body {
     display: none;
   }
 
-  /* Hide low-frequency actions on mobile toolbar; accessible via close book → upload screen */
+  /* Hide low-frequency actions on mobile toolbar */
   .book-title,
-  .btn-close-book,
   #btn-open-book {
     display: none;
   }

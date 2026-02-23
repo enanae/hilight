@@ -119,11 +119,11 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
   await rendition.display();
 
   // After display, fix the epub-container for iOS momentum scrolling
-  // and add a scroll-to-bottom indicator.
+  // and add chapter navigation banners.
   const container = getScrollContainer();
   if (container) {
     container.style.webkitOverflowScrolling = 'touch';
-    setupEndOfSectionBanner(container, viewerEl);
+    setupChapterBanners(container, viewerEl);
   }
 
   return { book, rendition };
@@ -496,29 +496,48 @@ function hideLoadingOverlay(viewerEl) {
 }
 
 /**
- * Show a "next chapter" banner when the user scrolls to the bottom of a section.
- * Tapping the banner advances to the next section.
+ * Show chapter navigation banners at the top and bottom of each section.
+ * "← Previous chapter" appears when scrolled near the top.
+ * "Next chapter →" appears when scrolled near the bottom.
+ * Replaces the side nav buttons — natural chapter transitions via scroll position.
  */
-function setupEndOfSectionBanner(container, viewerEl) {
-  // Create the banner element (lives in the parent document, overlaid on the viewer)
-  let banner = viewerEl.querySelector('.hl-end-banner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.className = 'hl-end-banner';
-    banner.innerHTML = 'Next chapter &#8594;';
-    banner.addEventListener('click', () => {
+function setupChapterBanners(container, viewerEl) {
+  viewerEl.style.position = 'relative';
+
+  // --- Bottom banner: "Next chapter →" ---
+  let endBanner = viewerEl.querySelector('.hl-end-banner');
+  if (!endBanner) {
+    endBanner = document.createElement('div');
+    endBanner.className = 'hl-end-banner';
+    endBanner.innerHTML = 'Next chapter &#8594;';
+    endBanner.addEventListener('click', () => {
       if (state.currentRendition) state.currentRendition.next();
     });
-    viewerEl.style.position = 'relative';
-    viewerEl.appendChild(banner);
+    viewerEl.appendChild(endBanner);
+  }
+
+  // --- Top banner: "← Previous chapter" ---
+  let startBanner = viewerEl.querySelector('.hl-start-banner');
+  if (!startBanner) {
+    startBanner = document.createElement('div');
+    startBanner.className = 'hl-start-banner';
+    startBanner.innerHTML = '&#8592; Previous chapter';
+    startBanner.addEventListener('click', () => {
+      if (state.currentRendition) state.currentRendition.prev();
+    });
+    viewerEl.appendChild(startBanner);
   }
 
   const onScroll = () => {
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
-    banner.classList.toggle('visible', atBottom);
+    endBanner.classList.toggle('visible', atBottom);
+    const atTop = container.scrollTop <= 5;
+    startBanner.classList.toggle('visible', atTop);
   };
   // Use managed listener so it's cleaned up in destroyEpub()
   state.scrollCleanup = addManagedScrollListener(container, onScroll);
+  // Check initial position (e.g. short chapters that fit in one viewport)
+  onScroll();
 }
 
 /** Inject highlight CSS into the epub's iframe document. */
@@ -594,7 +613,6 @@ function injectStyles(doc) {
       padding: 12px 30px 12px 16px;
       max-width: min(340px, calc(100vw - 20px));
       min-width: 200px;
-      position: relative;
       font-size: 14px;
       line-height: 1.5;
       font-family: system-ui, sans-serif;

@@ -96,23 +96,21 @@ function renderApp() {
 
       <div id="reader-area" class="reader-area">
         <div id="focus-bar" class="focus-bar">
-          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#8592;<span class="btn-label"> Menu</span></button>
+          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#8592;<span class="btn-label"> Back</span></button>
           <button id="btn-focus-vocab" class="toolbar-btn" title="Vocabulary (V)">&#128218;<span class="btn-label"> Vocab</span></button>
+          <button id="btn-focus-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label"> Help</span></button>
         </div>
         <div class="reader-toolbar">
           <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label"> Contents</span></button>
           <span id="book-title" class="book-title"></span>
-          <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> Page known</span></button>
+          <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> All known</span></button>
           <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label"> Vocab</span></button>
+          <button id="btn-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label"> Help</span></button>
           <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label"> Open</span></button>
           <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label"> Focus</span></button>
-          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close book</span></button>
+          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close</span></button>
         </div>
-        <div class="reader-nav">
-          <button id="btn-prev" class="nav-btn" title="Previous">&lsaquo;</button>
-          <div id="epub-viewer" class="epub-viewer"></div>
-          <button id="btn-next" class="nav-btn" title="Next">&rsaquo;</button>
-        </div>
+        <div id="epub-viewer" class="epub-viewer"></div>
         <div id="review-bar" class="review-bar">
           <span class="review-bar-label">REVIEW</span>
           <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
@@ -186,14 +184,15 @@ function renderApp() {
               <dt>Tap a word</dt><dd>Cycle: unknown &#8594; learning &#8594; known</dd>
               <dt>Long-press</dt><dd>Show dictionary definition</dd>
               <dt>Double-tap</dt><dd>Show dictionary definition</dd>
-              <dt>&#8592; &#8594; buttons</dt><dd>Previous / next page</dd>
+              <dt>Scroll</dt><dd>Read through the chapter</dd>
             </dl>
             <h3>Toolbar</h3>
             <dl class="help-keys">
               <dt>&#9776; Contents</dt><dd>Open table of contents</dd>
-              <dt>&#10003; Page known</dt><dd>Mark all words on page as known</dd>
+              <dt>&#10003; All known</dt><dd>Mark all words on page as known</dd>
               <dt>&#128218; Vocab</dt><dd>Browse saved vocabulary</dd>
               <dt>&#9673; Focus</dt><dd>Hide menus for distraction-free reading</dd>
+              <dt>&#10005; Close</dt><dd>Close book and return to start</dd>
             </dl>
           </div>
           <div class="help-keyboard">
@@ -283,14 +282,6 @@ function bindEvents() {
     state.defLanguage = e.target.value;
     localStorage.setItem('hilight-def-lang', state.defLanguage);
   });
-
-  // Navigation — suppressed while definition popup is showing
-  document.getElementById('btn-prev').addEventListener('click', safeHandler(() => {
-    if (!isPopupActive()) prevPage();
-  }));
-  document.getElementById('btn-next').addEventListener('click', safeHandler(() => {
-    if (!isPopupActive()) nextPage();
-  }));
 
   // Keyboard shortcuts — suppressed while popup showing or typing in inputs
   document.addEventListener('keydown', safeHandler(async (e) => {
@@ -466,7 +457,9 @@ function bindEvents() {
     document.getElementById('file-input').click();
   });
 
-  // Help modal
+  // Help modal — accessible from toolbar, focus bar, and keyboard (?)
+  document.getElementById('btn-help').addEventListener('click', safeHandler(toggleHelp));
+  document.getElementById('btn-focus-help').addEventListener('click', safeHandler(toggleHelp));
   document.getElementById('btn-close-help').addEventListener('click', safeHandler(closeHelp));
   document.querySelector('#help-modal .modal-backdrop').addEventListener('click', safeHandler(closeHelp));
   document.querySelector('#help-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
