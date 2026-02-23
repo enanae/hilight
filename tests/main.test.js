@@ -120,7 +120,6 @@ describe('App Rendering', () => {
     const readerArea = document.getElementById('reader-area');
     expect(readerArea).not.toBeNull();
     expect(document.getElementById('btn-toc')).not.toBeNull();
-    expect(document.getElementById('btn-mark-known')).not.toBeNull();
     expect(document.getElementById('btn-vocab')).not.toBeNull();
     expect(document.getElementById('btn-close-book')).not.toBeNull();
     expect(document.getElementById('btn-help')).not.toBeNull();
@@ -665,75 +664,8 @@ describe('Vocab Panel', () => {
   });
 });
 
-// ── Subdomain: Mark All Known ───────────────────────────────────────────
-
-describe('Mark All Known', () => {
-  it('does nothing when there is no iframe document', () => {
-    getIframeDocument.mockReturnValue(null);
-    document.getElementById('btn-mark-known').click();
-    expect(markAllKnown).not.toHaveBeenCalled();
-  });
-
-  it('calls markAllKnown on the iframe doc when btn-mark-known is clicked', () => {
-    const fakeDoc = document.createElement('div');
-    getIframeDocument.mockReturnValue(fakeDoc);
-    document.getElementById('btn-mark-known').click();
-    expect(markAllKnown).toHaveBeenCalledWith(fakeDoc);
-  });
-
-  it('shows undo toast after marking words known', async () => {
-    const fakeDoc = document.createElement('div');
-    getIframeDocument.mockReturnValue(fakeDoc);
-    markAllKnown.mockResolvedValue([{ word: 'hello', prev: 0 }]);
-
-    document.getElementById('btn-mark-known').click();
-
-    await vi.waitFor(() => {
-      const toast = document.querySelector('.undo-toast');
-      expect(toast).not.toBeNull();
-      expect(toast.textContent).toContain('1 words as known');
-      expect(toast.querySelector('.undo-btn')).not.toBeNull();
-    });
-
-    // Clean up the toast
-    document.querySelector('.undo-toast')?.remove();
-  });
-
-  it('invokes restoreWordLevels when undo is clicked', async () => {
-    const fakeDoc = document.createElement('div');
-    getIframeDocument.mockReturnValue(fakeDoc);
-    const prevState = [{ word: 'hello', prev: 0 }];
-    markAllKnown.mockResolvedValue(prevState);
-
-    document.getElementById('btn-mark-known').click();
-
-    await vi.waitFor(() => {
-      const toast = document.querySelector('.undo-toast');
-      expect(toast).not.toBeNull();
-    });
-
-    const undoBtn = document.querySelector('.undo-btn');
-    undoBtn.click();
-
-    await vi.waitFor(() => {
-      expect(restoreWordLevels).toHaveBeenCalledWith(fakeDoc, prevState);
-    });
-  });
-
-  it('does not show undo toast when no words were marked', async () => {
-    const fakeDoc = document.createElement('div');
-    getIframeDocument.mockReturnValue(fakeDoc);
-    markAllKnown.mockResolvedValue([]);
-
-    document.getElementById('btn-mark-known').click();
-
-    // Wait for the async chain to finish
-    await new Promise(r => setTimeout(r, 50));
-
-    const toast = document.querySelector('.undo-toast');
-    expect(toast).toBeNull();
-  });
-});
+// Mark-all-known button has moved to the vocab panel (vocab-browser.js).
+// The K keyboard shortcut still triggers doMarkAllKnown — tested above.
 
 // ── Subdomain: Export / Import ──────────────────────────────────────────
 

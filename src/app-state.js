@@ -35,6 +35,7 @@ export const state = {
   reviewLastGrade: null,       // last grade applied (for Space quick-advance)
   reviewShowAll: false,        // false = skip known words, true = navigate all
   reviewPendingResume: false,  // true = re-enter review after section change
+  reviewResumeDirection: null, // 'forward' | 'backward' — which end to start from on resume
 
   // Last word the user interacted with via mouse/touch (for review mode start position)
   lastInteractedWord: null,
@@ -78,6 +79,7 @@ export function resetState() {
   state.reviewLastGrade = null;
   state.reviewShowAll = false;
   state.reviewPendingResume = false;
+  state.reviewResumeDirection = null;
   state.lastInteractedWord = null;
   state.popupActive = false;
   Object.assign(state.vocab, {

@@ -407,3 +407,207 @@ to be run **from code alone**, without launching the app:
 If these three are accurate, a reviewer can do a full cognitive
 walkthrough by reading code. If any is missing, they have to run
 the app and click around, which is slower and misses edge states.
+
+---
+
+## 12. Audit Blindspot Catalog
+
+Heuristic evaluations and cognitive walkthroughs have systematic
+failure modes. Even experienced auditors miss the same categories
+of issues repeatedly. This section catalogs those blindspots so
+audits can explicitly check for them.
+
+### BS1: Icon–Action Coherence
+
+**The problem:** An icon carries universal meaning that can
+contradict the label next to it. Auditors check whether a label
+is clear in isolation, but don't check whether the icon *overrides*
+the label's meaning in the user's mind.
+
+**Why it's missed:** Heuristic evaluations assess labels and icons
+separately ("Is the label clear?" "Does the icon have a tooltip?").
+They don't ask: "If the icon and label disagree, which one wins?"
+Icons win. Always. They're processed pre-attentively.
+
+**Examples of failure:**
+- ✕ next to "Close book" — ✕ universally means "dismiss this
+  element" (close a panel, dismiss a toast). Users will interpret
+  it as closing the nearest container, not the book.
+- ↓ next to "Save" — ↓ means "download" in most UIs, not "persist
+  to database."
+- ☰ for "Table of contents" — ☰ means "menu" everywhere else.
+
+**Audit check:** For every icon+label pair, ask: *"If I covered
+the label, what would a stranger think this icon does?"* If the
+answer differs from the label, the icon is wrong, not the label.
+
+### BS2: Toolbar Gestalt — Evaluating Buttons in Groups
+
+**The problem:** Buttons are audited individually ("Is this label
+clear?") but users perceive toolbars as a group. A button that
+makes sense alone can fail in context because:
+
+- It looks identical to its neighbors (same size, same style),
+  making the toolbar feel like undifferentiated soup.
+- Its purpose is rare/destructive but it sits next to frequent
+  actions with the same visual weight, creating accidental
+  activation risk.
+- Its meaning shifts depending on which buttons surround it.
+
+**Why it's missed:** Cognitive walkthroughs test one task at a time.
+They ask "Can the user find this button?" but not "Can the user
+distinguish this button from the five others next to it?"
+
+**Audit check:** Screenshot or mentally render the full toolbar.
+Ask: *"If I blur my eyes, can I still tell which button is which?"*
+If all buttons look the same, the toolbar fails regardless of how
+good each individual label is.
+
+### BS3: Scope Inference from Placement
+
+**The problem:** The same control means different things depending
+on where it appears. A "Close" button in a modal closes the modal.
+A "Close" button in a toolbar closes... what? The toolbar? The
+panel? The book? The app? Users infer scope from spatial context.
+
+**Why it's missed:** Auditors evaluate the control in the context
+they designed it for. They know "Close" means "close the book"
+because they wrote the code. A stranger sees "Close" in a toolbar
+next to other toolbar actions and assumes it closes the toolbar
+or the nearest open panel.
+
+**The rule:** Controls must either:
+1. Name their scope explicitly ("Close book", "Close panel"), or
+2. Be placed inside the thing they act on (a ✕ inside a panel
+   header clearly closes that panel).
+
+**Audit check:** For every action button, ask: *"If this button
+were in a different container, would its meaning change?"* If yes,
+the label needs a noun.
+
+### BS4: Frequency–Prominence Mismatch
+
+**The problem:** A button that's used rarely (or once per session)
+occupies premium toolbar space alongside frequently-used actions.
+This wastes screen real estate on mobile and creates confusion
+about what the "core" actions are.
+
+**Why it's missed:** Audits check "Is every needed action
+accessible?" but not "Is this action accessed *often enough* to
+justify its placement?" Every feature's owner thinks their button
+deserves top-level placement.
+
+**The rule:** Toolbar space is proportional to usage frequency.
+Actions used less than once per reading session belong in menus,
+panels, or settings.
+
+**Audit check:** Rank every toolbar button by expected uses per
+session. If a button is used ≤1 time per session and the toolbar
+has more than 4 items, it should be demoted to a secondary location.
+
+### BS5: Layout-Dependent Issues Are Invisible to Text-Level Audits
+
+**The problem:** Auditing individual labels, icons, and controls
+catches semantic issues but misses spatial ones. You can't detect
+these by reading code:
+
+- A toolbar that wraps to 3 rows on narrow screens
+- Two buttons that are 12px apart on mobile (below 44px touch gap)
+- A panel that covers 100% of the viewport with no backdrop or
+  outside-click to dismiss
+- A control that's technically present but scrolled below the fold
+
+**Why it's missed:** Code-level audits operate on strings and DOM
+structure, not on rendered layout. CSS media queries create
+entirely different layouts that are invisible until you actually
+render at that breakpoint.
+
+**Audit check:** For every component, mentally render it at three
+widths: 375px (phone), 768px (tablet), 1280px (desktop). Ask at
+each: *"Does anything overflow, wrap unexpectedly, overlap, or
+become unreachable?"* If you can't answer confidently without
+running the app, that's the blindspot.
+
+### BS6: The Auditor's Curse — You Can't Stranger-Test Your Own Work
+
+**The problem:** The person who wrote the code (or the AI that
+generated it) cannot reliably perform the Stranger Test on their
+own output. They know what every button does because they just
+built it. This makes it impossible to genuinely evaluate first-use
+discoverability.
+
+**Why it's missed:** It's not that the audit step is missing — it's
+that the auditor executing it has disqualifying knowledge. Knowing
+the intended behavior of a control makes it impossible to see that
+control as ambiguous.
+
+**Mitigations:**
+1. **Time delay:** Audit your own UI at least one day after
+   building it, when the details have faded from working memory.
+2. **Explicit role-play:** Before checking each control, write
+   down what you think a stranger would guess it does BEFORE you
+   check what it actually does. If you can't separate your
+   knowledge from the stranger's, assume the control is ambiguous.
+3. **Checklist forcing function:** For every interactive element,
+   fill in this template:
+   ```
+   Element: [description]
+   Icon alone says: [what the icon implies]
+   Label alone says: [what the text implies]
+   Together they say: [combined meaning]
+   Actual function: [what it really does]
+   Mismatch? [yes/no]
+   ```
+   If any row has a mismatch, fix it.
+4. **External review:** If possible, show the UI to someone who
+   hasn't seen it before and ask them to narrate. Every wrong
+   guess is a bug.
+
+### BS7: State Invalidation from User Actions
+
+**The problem:** The user performs an action that, as a side
+effect, invalidates the state governing a concurrent interaction.
+The system silently falls back to a default instead of recovering
+to the nearest valid state.
+
+**Why it's missed:** Audits test one interaction at a time. They
+check "Does grading work?" and "Does navigation work?" separately,
+but never ask "What happens when you grade WHILE navigating?" The
+intersection of two working features can produce a broken
+experience that neither feature's test catches.
+
+**The pattern:** Any time a user action modifies data that
+determines their current position in a list, navigation, or
+selection, the position can silently reset. Examples:
+- Grading/categorizing an item removes it from the current
+  filter, causing the cursor to jump to the beginning
+- Deleting a selected item in a list resets selection to the
+  first item instead of selecting the next item
+- Reordering items while iterating through them causes skips
+  or revisits
+- Editing a record's field causes it to move in a sorted view,
+  and the user loses track of where they were
+
+**The fix pattern:** When the current position becomes invalid,
+navigate to the nearest valid position by spatial/DOM/sort
+order — not to the default (first item). The system should
+preserve the user's sense of "where I am" even when the exact
+item they were on no longer qualifies.
+
+**Audit check:** For every action the user can take mid-
+interaction (while navigating, selecting, scrolling, filtering),
+ask: *"Does this action change any data that the current
+interaction depends on? If so, what happens to the user's
+position?"* The answer should never be "resets to the start."
+
+### Applying Blindspot Checks
+
+Add these to the evaluation protocol in §11:
+
+| Trigger                        | Also run                                       |
+|--------------------------------|------------------------------------------------|
+| New toolbar/button bar         | BS1 (icon coherence), BS2 (gestalt), BS4 (freq)|
+| Any "Close"/"Delete"/"Remove"  | BS3 (scope inference), BS1 (icon coherence)     |
+| Mobile layout change           | BS5 (layout-dependent), BS2 (toolbar gestalt)   |
+| Self-audit (no external review)| BS6 (auditor's curse checklist)                 |
+| Any action during stateful nav | BS7 (state invalidation from user actions)      |

@@ -139,6 +139,41 @@ describe('enterReviewMode', () => {
     expect(getFocusedWord().textContent).toBe('hello'); // falls back to first
     exitReviewMode();
   });
+
+  it('focuses last word when direction is backward (chapter resume)', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+      { text: 'foo', level: 0 },
+    ]);
+    enterReviewMode(doc, { direction: 'backward' });
+    expect(getFocusedWord().textContent).toBe('foo'); // last word
+    exitReviewMode();
+  });
+
+  it('focuses first word when direction is forward (default)', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+    ]);
+    enterReviewMode(doc, { direction: 'forward' });
+    expect(getFocusedWord().textContent).toBe('hello');
+    exitReviewMode();
+  });
+
+  it('direction is ignored when lastInteractedWord is valid', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+      { text: 'foo', level: 0 },
+    ]);
+    const spans = doc.querySelectorAll('.hl-word');
+    state.lastInteractedWord = spans[1]; // "world"
+    // direction=backward should be overridden by lastInteractedWord
+    enterReviewMode(doc, { direction: 'backward' });
+    expect(getFocusedWord().textContent).toBe('world');
+    exitReviewMode();
+  });
 });
 
 describe('exitReviewMode', () => {
@@ -190,6 +225,48 @@ describe('focusNextWord', () => {
     expect(getFocusedWord().textContent).toBe('world');
     exitReviewMode();
   });
+
+  it('advances to nearest word when focused word is graded as known', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+      { text: 'foo', level: 0 },
+    ]);
+    enterReviewMode(doc);
+    focusNextWord(doc);
+    expect(getFocusedWord().textContent).toBe('world');
+
+    // Simulate grading "world" as known — changes DOM level
+    const worldSpan = getFocusedWord();
+    worldSpan.dataset.level = '2';
+    worldSpan.className = 'hl-word hl-known';
+
+    // focusNextWord should advance to "foo" (not jump to "hello")
+    const result = focusNextWord(doc);
+    expect(result).toBe('moved');
+    expect(getFocusedWord().textContent).toBe('foo');
+    exitReviewMode();
+  });
+
+  it('returns "end" when graded word was the last eligible', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+    ]);
+    enterReviewMode(doc);
+    focusNextWord(doc);
+    expect(getFocusedWord().textContent).toBe('world');
+
+    // Grade "world" as known — now only "hello" is eligible
+    const worldSpan = getFocusedWord();
+    worldSpan.dataset.level = '2';
+    worldSpan.className = 'hl-word hl-known';
+
+    // No eligible words after "world" → should return 'end'
+    const result = focusNextWord(doc);
+    expect(result).toBe('end');
+    exitReviewMode();
+  });
 });
 
 describe('focusPrevWord', () => {
@@ -211,6 +288,47 @@ describe('focusPrevWord', () => {
   it('returns "start" when at the first word', () => {
     const doc = makeIframeDoc([{ text: 'only', level: 0 }]);
     enterReviewMode(doc);
+    const result = focusPrevWord(doc);
+    expect(result).toBe('start');
+    exitReviewMode();
+  });
+
+  it('retreats to nearest word when focused word is graded as known', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+      { text: 'foo', level: 0 },
+    ]);
+    enterReviewMode(doc);
+    focusNextWord(doc);
+    expect(getFocusedWord().textContent).toBe('world');
+
+    // Grade "world" as known
+    const worldSpan = getFocusedWord();
+    worldSpan.dataset.level = '2';
+    worldSpan.className = 'hl-word hl-known';
+
+    // focusPrevWord should go to "hello" (not return 'start' prematurely)
+    const result = focusPrevWord(doc);
+    expect(result).toBe('moved');
+    expect(getFocusedWord().textContent).toBe('hello');
+    exitReviewMode();
+  });
+
+  it('returns "start" when graded word was the first eligible', () => {
+    const doc = makeIframeDoc([
+      { text: 'hello', level: 0 },
+      { text: 'world', level: 0 },
+    ]);
+    enterReviewMode(doc);
+    expect(getFocusedWord().textContent).toBe('hello');
+
+    // Grade "hello" as known
+    const helloSpan = getFocusedWord();
+    helloSpan.dataset.level = '2';
+    helloSpan.className = 'hl-word hl-known';
+
+    // No eligible words before "hello" → should return 'start'
     const result = focusPrevWord(doc);
     expect(result).toBe('start');
     exitReviewMode();

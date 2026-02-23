@@ -79,7 +79,7 @@
 import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
 import { getAllBookWords } from './epub-reader.js';
 import { stem } from './stemmer.js';
-import { LEVEL_PARTIAL, LEVEL_KNOWN } from './highlighter.js';
+import { LEVEL_PARTIAL, LEVEL_KNOWN, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { state } from './app-state.js';
 import { escapeHtml, showUndoToast } from './ui-utils.js';
 
@@ -165,6 +165,7 @@ function ensurePanel() {
     <div class="vocab-list"></div>
     <div class="vocab-summary"></div>
     <div class="vocab-actions">
+      <button class="vocab-mark-page-btn" title="Mark every word on the current page as known (K)">Mark all words on this page as known</button>
       <button class="vocab-forget-btn" data-scope="book" disabled title="Forget saved words that appear in the current book">Forget in book</button>
       <button class="vocab-forget-btn" data-scope="all" title="Forget all saved words for this language">Forget all</button>
     </div>
@@ -220,6 +221,25 @@ function ensurePanel() {
     if (row) {
       cycleWord(row.dataset.word);
     }
+  });
+
+  state.vocab.panelEl.querySelector('.vocab-mark-page-btn').addEventListener('click', async () => {
+    const iframeDoc = state.vocab.iframeDocGetter ? state.vocab.iframeDocGetter() : null;
+    if (!iframeDoc) return;
+    const prev = await markAllKnown(iframeDoc);
+    if (state.vocab.onStatsUpdate) state.vocab.onStatsUpdate();
+    if (prev.length === 0) return;
+    // Refresh the vocab list to reflect new levels
+    state.vocab.dbWords = await getAllWords(state.currentLanguage);
+    await rebuildDisplayWords();
+    renderList();
+    showUndoToast(`Marked ${prev.length} words as known`, async () => {
+      await restoreWordLevels(iframeDoc, prev);
+      if (state.vocab.onStatsUpdate) state.vocab.onStatsUpdate();
+      state.vocab.dbWords = await getAllWords(state.currentLanguage);
+      await rebuildDisplayWords();
+      renderList();
+    });
   });
 
   state.vocab.panelEl.querySelector('.vocab-actions').addEventListener('click', (e) => {
@@ -278,6 +298,10 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
     state.vocab.inBookOnly = false;
     state.vocab.lastBookId = bookId;
   }
+
+  // Enable/disable mark-page button based on whether we have an iframe
+  const markPageBtn = state.vocab.panelEl.querySelector('.vocab-mark-page-btn');
+  if (markPageBtn) markPageBtn.disabled = !bookLoaded;
 
   // Sync the checkbox and status with current book state
   if (!bookLoaded) {
