@@ -563,6 +563,43 @@ control as ambiguous.
    hasn't seen it before and ask them to narrate. Every wrong
    guess is a bug.
 
+### BS7: State Invalidation from User Actions
+
+**The problem:** The user performs an action that, as a side
+effect, invalidates the state governing a concurrent interaction.
+The system silently falls back to a default instead of recovering
+to the nearest valid state.
+
+**Why it's missed:** Audits test one interaction at a time. They
+check "Does grading work?" and "Does navigation work?" separately,
+but never ask "What happens when you grade WHILE navigating?" The
+intersection of two working features can produce a broken
+experience that neither feature's test catches.
+
+**The pattern:** Any time a user action modifies data that
+determines their current position in a list, navigation, or
+selection, the position can silently reset. Examples:
+- Grading/categorizing an item removes it from the current
+  filter, causing the cursor to jump to the beginning
+- Deleting a selected item in a list resets selection to the
+  first item instead of selecting the next item
+- Reordering items while iterating through them causes skips
+  or revisits
+- Editing a record's field causes it to move in a sorted view,
+  and the user loses track of where they were
+
+**The fix pattern:** When the current position becomes invalid,
+navigate to the nearest valid position by spatial/DOM/sort
+order — not to the default (first item). The system should
+preserve the user's sense of "where I am" even when the exact
+item they were on no longer qualifies.
+
+**Audit check:** For every action the user can take mid-
+interaction (while navigating, selecting, scrolling, filtering),
+ask: *"Does this action change any data that the current
+interaction depends on? If so, what happens to the user's
+position?"* The answer should never be "resets to the start."
+
 ### Applying Blindspot Checks
 
 Add these to the evaluation protocol in §11:
@@ -573,3 +610,4 @@ Add these to the evaluation protocol in §11:
 | Any "Close"/"Delete"/"Remove"  | BS3 (scope inference), BS1 (icon coherence)     |
 | Mobile layout change           | BS5 (layout-dependent), BS2 (toolbar gestalt)   |
 | Self-audit (no external review)| BS6 (auditor's curse checklist)                 |
+| Any action during stateful nav | BS7 (state invalidation from user actions)      |

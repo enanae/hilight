@@ -22,8 +22,11 @@ export function isReviewMode() {
  * Enter review mode. Focuses the nearest eligible word to the last
  * mouse/touch interaction, or the first eligible word if none.
  * @param {Document} iframeDoc - the epub iframe document
+ * @param {Object} [options]
+ * @param {'forward'|'backward'} [options.direction='forward'] - which end to
+ *   start from when no lastInteractedWord is available (e.g. chapter resume)
  */
-export function enterReviewMode(iframeDoc) {
+export function enterReviewMode(iframeDoc, { direction = 'forward' } = {}) {
   if (!iframeDoc) return;
   state.reviewMode = true;
 
@@ -44,19 +47,15 @@ export function enterReviewMode(iframeDoc) {
     }
     // Last interacted word isn't eligible (e.g. filtered out as known) —
     // find the nearest eligible word by document position
-    const allSpans = [...iframeDoc.querySelectorAll('.hl-word')];
-    const lastPos = allSpans.indexOf(lastWord);
-    if (lastPos >= 0) {
-      // Find the closest eligible word after the last interacted position
-      const nearest = words.find(w => allSpans.indexOf(w) >= lastPos);
-      if (nearest) {
-        focusWord(nearest);
-        return;
-      }
+    const nearest = findNearestByPosition(iframeDoc, lastWord, words, 'forward');
+    if (nearest) {
+      focusWord(nearest);
+      return;
     }
   }
 
-  focusWord(words[0]);
+  // Fallback: first word for forward navigation, last word for backward
+  focusWord(direction === 'backward' ? words[words.length - 1] : words[0]);
 }
 
 /** Exit review mode. Removes focus ring and resets state. */
@@ -79,9 +78,22 @@ export function focusNextWord(iframeDoc) {
   if (words.length === 0) return 'end';
 
   const currentIdx = findCurrentIndex(words);
-  if (currentIdx < words.length - 1) {
-    focusWord(words[currentIdx + 1]);
-    return 'moved';
+  if (currentIdx >= 0) {
+    if (currentIdx < words.length - 1) {
+      focusWord(words[currentIdx + 1]);
+      return 'moved';
+    }
+    return 'end';
+  }
+
+  // Focused word was filtered out (e.g. just graded as known) —
+  // find the nearest eligible word forward by DOM position
+  if (state.reviewFocusedWord) {
+    const nearest = findNearestByPosition(iframeDoc, state.reviewFocusedWord, words, 'forward');
+    if (nearest) {
+      focusWord(nearest);
+      return 'moved';
+    }
   }
   return 'end';
 }
@@ -100,6 +112,16 @@ export function focusPrevWord(iframeDoc) {
   if (currentIdx > 0) {
     focusWord(words[currentIdx - 1]);
     return 'moved';
+  }
+  if (currentIdx === 0) return 'start';
+
+  // Focused word was filtered out — find the nearest eligible word backward
+  if (state.reviewFocusedWord) {
+    const nearest = findNearestByPosition(iframeDoc, state.reviewFocusedWord, words, 'backward');
+    if (nearest) {
+      focusWord(nearest);
+      return 'moved';
+    }
   }
   return 'start';
 }
@@ -142,7 +164,11 @@ export function toggleFilter(iframeDoc) {
   const current = state.reviewFocusedWord;
   if (current && words.includes(current)) return;
 
-  // Otherwise focus the nearest eligible word
+  // Focused word filtered out — find nearest by DOM position
+  if (current) {
+    const nearest = findNearestByPosition(iframeDoc, current, words, 'forward');
+    if (nearest) { focusWord(nearest); return; }
+  }
   focusWord(words[0]);
 }
 
@@ -167,12 +193,36 @@ function getFilteredWordList(iframeDoc) {
 
 /**
  * Find the index of the currently focused word in the given list.
- * Returns 0 if not found (start from beginning).
+ * Returns -1 if not found (focused word is null or was filtered out).
  */
 function findCurrentIndex(words) {
   if (!state.reviewFocusedWord) return -1;
   const idx = words.indexOf(state.reviewFocusedWord);
   return idx >= 0 ? idx : -1;
+}
+
+/**
+ * Find the nearest word in the filtered list by DOM position relative
+ * to a reference span. Used when the focused word has been filtered out
+ * (e.g. graded as known) and we need to find the next valid target.
+ * @param {Document} iframeDoc
+ * @param {HTMLElement} referenceSpan - the (possibly filtered-out) span
+ * @param {HTMLElement[]} words - the filtered word list
+ * @param {'forward'|'backward'} direction
+ * @returns {HTMLElement|null}
+ */
+function findNearestByPosition(iframeDoc, referenceSpan, words, direction) {
+  const allSpans = [...iframeDoc.querySelectorAll('.hl-word')];
+  const pos = allSpans.indexOf(referenceSpan);
+  if (pos < 0) return null;
+  if (direction === 'forward') {
+    return words.find(w => allSpans.indexOf(w) > pos) || null;
+  }
+  // backward: find last eligible word before the reference position
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (allSpans.indexOf(words[i]) < pos) return words[i];
+  }
+  return null;
 }
 
 /**

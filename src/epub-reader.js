@@ -107,7 +107,12 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
     // Resume review mode after section change if pending
     if (state.reviewPendingResume) {
       state.reviewPendingResume = false;
-      enterReviewMode(doc);
+      const direction = state.reviewResumeDirection || 'forward';
+      state.reviewResumeDirection = null;
+      // Clear stale DOM references from previous chapter
+      state.lastInteractedWord = null;
+      state.reviewFocusedWord = null;
+      enterReviewMode(doc, { direction });
     }
   });
 

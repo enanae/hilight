@@ -301,6 +301,7 @@ function bindEvents() {
           const result = focusNextWord(iframeDoc);
           if (result === 'end') {
             state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'forward';
             await nextPage();
           }
           break;
@@ -309,6 +310,7 @@ function bindEvents() {
           const result = focusPrevWord(iframeDoc);
           if (result === 'start') {
             state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'backward';
             await prevPage();
           }
           break;
@@ -317,10 +319,10 @@ function bindEvents() {
           e.preventDefault();
           if (e.shiftKey) {
             const result = focusPrevWord(iframeDoc);
-            if (result === 'start') { state.reviewPendingResume = true; await prevPage(); }
+            if (result === 'start') { state.reviewPendingResume = true; state.reviewResumeDirection = 'backward'; await prevPage(); }
           } else {
             const result = focusNextWord(iframeDoc);
-            if (result === 'end') { state.reviewPendingResume = true; await nextPage(); }
+            if (result === 'end') { state.reviewPendingResume = true; state.reviewResumeDirection = 'forward'; await nextPage(); }
           }
           break;
         case '1': await gradeAndUpdate(0); break;
@@ -690,6 +692,7 @@ async function quickAdvance() {
   const result = focusNextWord(iframeDoc);
   if (result === 'end') {
     state.reviewPendingResume = true;
+    state.reviewResumeDirection = 'forward';
     await nextPage();
   }
 }
