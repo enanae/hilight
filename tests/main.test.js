@@ -116,15 +116,16 @@ describe('App Rendering', () => {
     expect(fileInput.accept).toContain('.epub');
   });
 
-  it('renders the reader area with navigation buttons and toolbar', () => {
+  it('renders the reader area with toolbar and help buttons', () => {
     const readerArea = document.getElementById('reader-area');
     expect(readerArea).not.toBeNull();
-    expect(document.getElementById('btn-prev')).not.toBeNull();
-    expect(document.getElementById('btn-next')).not.toBeNull();
     expect(document.getElementById('btn-toc')).not.toBeNull();
     expect(document.getElementById('btn-mark-known')).not.toBeNull();
     expect(document.getElementById('btn-vocab')).not.toBeNull();
     expect(document.getElementById('btn-close-book')).not.toBeNull();
+    expect(document.getElementById('btn-help')).not.toBeNull();
+    expect(document.getElementById('btn-focus-help')).not.toBeNull();
+    expect(document.getElementById('epub-viewer')).not.toBeNull();
   });
 
   it('renders the settings modal with provider select and action buttons', () => {
@@ -262,30 +263,8 @@ describe('Stats Display', () => {
   });
 });
 
-// ── Subdomain: Navigation Buttons ───────────────────────────────────────
-
-describe('Navigation Buttons', () => {
-  it('calls prevPage when the prev button is clicked', () => {
-    document.getElementById('btn-prev').click();
-    expect(prevPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls nextPage when the next button is clicked', () => {
-    document.getElementById('btn-next').click();
-    expect(nextPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('suppresses navigation when isPopupActive returns true', () => {
-    isPopupActive.mockReturnValue(true);
-
-    document.getElementById('btn-prev').click();
-    document.getElementById('btn-next').click();
-    expect(prevPage).not.toHaveBeenCalled();
-    expect(nextPage).not.toHaveBeenCalled();
-
-    isPopupActive.mockReturnValue(false);
-  });
-});
+// Navigation buttons removed — chapters are navigated via scroll + chapter banners.
+// Keyboard shortcuts ←/→ still work for desktop users.
 
 // ── Subdomain: Keyboard Shortcuts ───────────────────────────────────────
 
