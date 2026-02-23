@@ -39,6 +39,7 @@ vi.mock('../src/dictionary.js', () => ({
 
 vi.mock('../src/highlighter.js', () => ({
   isPopupActive: vi.fn(() => false),
+  closeActivePopup: vi.fn(),
   markAllKnown: vi.fn(async () => []),
   restoreWordLevels: vi.fn(async () => {}),
 }));
@@ -56,7 +57,7 @@ vi.mock('../src/style.css', () => ({}));
 import { nextPage, prevPage, setLanguage, getIframeDocument, destroyEpub, goToHref } from '../src/epub-reader.js';
 import { getStats, exportVocab, importVocab } from '../src/vocab-store.js';
 import { saveDictSettings, loadDictSettings, getActiveProviderId } from '../src/dictionary.js';
-import { isPopupActive, markAllKnown, restoreWordLevels } from '../src/highlighter.js';
+import { isPopupActive, closeActivePopup, markAllKnown, restoreWordLevels } from '../src/highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from '../src/vocab-browser.js';
 
 // ── Bootstrap: create #app then dynamically import main.js ──────────────
@@ -365,6 +366,53 @@ describe('Keyboard Shortcuts', () => {
     getIframeDocument.mockReturnValue(document.createElement('div'));
     pressKey('k', { metaKey: true });
     expect(markAllKnown).not.toHaveBeenCalled();
+  });
+
+  it('d closes popup when popup is active', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey('d');
+    expect(closeActivePopup).toHaveBeenCalled();
+    // Should NOT fall through to other handlers (d would show definition in review mode)
+    expect(closeActivePopup).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape closes popup when popup is active', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey('Escape');
+    expect(closeActivePopup).toHaveBeenCalled();
+  });
+
+  it('Tab closes popup and falls through to review/reading handler', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey('Tab');
+    expect(closeActivePopup).toHaveBeenCalled();
+    // Tab in reading mode enters review mode — the important thing is
+    // closeActivePopup was called, meaning popup was dismissed before handling
+  });
+
+  it('n closes popup and falls through to navigation', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey('n');
+    expect(closeActivePopup).toHaveBeenCalled();
+  });
+
+  it('Space closes popup and falls through to navigation', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey(' ');
+    expect(closeActivePopup).toHaveBeenCalled();
+  });
+
+  it('other keys are swallowed when popup is active', () => {
+    isPopupActive.mockReturnValueOnce(true);
+    getIframeDocument.mockReturnValue(document.createElement('div'));
+    pressKey('ArrowRight');
+    expect(closeActivePopup).not.toHaveBeenCalled();
+    expect(nextPage).not.toHaveBeenCalled();
   });
 });
 

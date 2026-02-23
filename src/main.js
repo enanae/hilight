@@ -2,7 +2,7 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
-import { isPopupActive, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
+import { isPopupActive, closeActivePopup, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 import { state } from './app-state.js';
 import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
@@ -207,12 +207,13 @@ function renderApp() {
               <div class="help-section">
                 <h3>Review Mode</h3>
                 <dl class="help-keys">
+                  <dt>Tab / Shift+Tab</dt><dd>Next / previous word</dd>
                   <dt>n / N</dt><dd>Next / previous word</dd>
                   <dt>1 / 2 / 3</dt><dd>Unknown / partial / known</dd>
-                  <dt>d / Enter</dt><dd>Show definition</dd>
+                  <dt>d / Enter</dt><dd>Show definition (d again to close)</dd>
                   <dt>Space</dt><dd>Apply last grade + next</dd>
                   <dt>a</dt><dd>Toggle all / unlearned</dd>
-                  <dt>Esc</dt><dd>Exit review mode</dd>
+                  <dt>Esc</dt><dd>Exit review / close popup</dd>
                 </dl>
               </div>
               <div class="help-section">
@@ -283,7 +284,21 @@ function bindEvents() {
 
   // Keyboard shortcuts — suppressed while popup showing or typing in inputs
   document.addEventListener('keydown', safeHandler(async (e) => {
-    if (isPopupActive()) return;
+    // When a definition popup is showing, allow specific keys to dismiss it
+    if (isPopupActive()) {
+      const iframeDoc = getIframeDocument();
+      if (e.key === 'Escape' || e.key === 'd') {
+        closeActivePopup(iframeDoc);
+        return;
+      }
+      // Navigation keys close the popup and continue to be handled below
+      if (e.key === 'Tab' || e.key === 'n' || e.key === 'N' || e.key === ' ') {
+        closeActivePopup(iframeDoc);
+        // Fall through to review/reading mode handler
+      } else {
+        return; // Swallow all other keys while popup is showing
+      }
+    }
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 

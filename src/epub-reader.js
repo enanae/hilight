@@ -114,6 +114,12 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
       state.reviewFocusedWord = null;
       enterReviewMode(doc, { direction });
     }
+
+    // Forward keyboard events from iframe to the outer document.
+    // When the user scrolls epub content, the iframe captures focus.
+    // Without forwarding, keyboard shortcuts (Tab, Space, n, etc.)
+    // never reach the outer keydown handler in main.js.
+    forwardIframeKeys(doc);
   });
 
   // Word tap handling via epubjs's event passthrough system.
@@ -285,6 +291,49 @@ function findWordSpan(target) {
   // Text nodes don't have closest(), walk to parent element
   const el = target.nodeType === 3 ? target.parentElement : target;
   return el?.closest?.('.hl-word') || null;
+}
+
+/**
+ * Forward keyboard events from an epub iframe to the outer document.
+ *
+ * The epub renders in an iframe with flow:'scrolled-doc'. When the user
+ * scrolls, the iframe captures focus. Subsequent key presses (Tab, Space,
+ * n, d, etc.) are handled by the browser inside the iframe — Space scrolls,
+ * Tab shifts focus — and the outer document's keydown handler never sees them.
+ *
+ * This function registers a keydown listener on the iframe doc that:
+ * 1. Prevents browser defaults for keys the app handles (Space=scroll, Tab=focus)
+ * 2. Re-dispatches the event on the outer document so main.js can handle it
+ */
+function forwardIframeKeys(iframeDoc) {
+  const FORWARD_KEYS = new Set([
+    'Tab', ' ', 'Escape', 'Enter',
+    'n', 'N', 'd', '1', '2', '3', 'a',
+    'ArrowLeft', 'ArrowRight',
+    'k', 'K', 'v', 'V', 't', 'T', 'w', 'W', 'f', 'F', '?',
+  ]);
+
+  iframeDoc.addEventListener('keydown', (e) => {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    if (!FORWARD_KEYS.has(e.key)) return;
+
+    // Prevent browser defaults inside the iframe (Space=scroll, Tab=focus-shift)
+    e.preventDefault();
+
+    // Re-dispatch on the outer document for main.js to handle
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: e.key,
+      code: e.code,
+      shiftKey: e.shiftKey,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      altKey: e.altKey,
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
 }
 
 /**

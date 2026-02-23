@@ -28,6 +28,15 @@ export function resetPopupState() {
   state.popupActive = false;
 }
 
+/** Close any open definition popup from keyboard. */
+export function closeActivePopup(iframeDoc) {
+  if (!state.popupActive) return;
+  if (iframeDoc) {
+    iframeDoc.querySelectorAll('.hl-popup').forEach(el => el.remove());
+  }
+  state.popupActive = false;
+}
+
 /**
  * Highlight all words in a container element.
  * Walks the DOM, finds text nodes, replaces them with word spans.
