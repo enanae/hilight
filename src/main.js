@@ -96,19 +96,18 @@ function renderApp() {
 
       <div id="reader-area" class="reader-area">
         <div id="focus-bar" class="focus-bar">
-          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#8592;<span class="btn-label"> Back</span></button>
-          <button id="btn-focus-vocab" class="toolbar-btn" title="Vocabulary (V)">&#128218;<span class="btn-label"> Vocab</span></button>
-          <button id="btn-focus-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label"> Help</span></button>
+          <button id="btn-exit-focus" class="toolbar-btn" title="Show menus (F)">&#8592;<span class="btn-label">Back</span></button>
+          <button id="btn-focus-vocab" class="toolbar-btn" title="Vocabulary (V)">&#128218;<span class="btn-label">Vocab</span></button>
+          <button id="btn-focus-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label">Help</span></button>
         </div>
         <div class="reader-toolbar">
-          <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label"> Contents</span></button>
+          <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label">Contents</span></button>
           <span id="book-title" class="book-title"></span>
-          <button id="btn-mark-known" class="toolbar-btn" title="Mark all unknown words on this page as known (K)">&#10003;<span class="btn-label"> All known</span></button>
-          <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label"> Vocab</span></button>
-          <button id="btn-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label"> Help</span></button>
-          <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label"> Open</span></button>
-          <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label"> Focus</span></button>
-          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#10005;<span class="btn-label"> Close</span></button>
+          <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label">Vocab</span></button>
+          <button id="btn-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label">Help</span></button>
+          <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label">Open</span></button>
+          <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label">Focus</span></button>
+          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#8617;<span class="btn-label">Close book</span></button>
         </div>
         <div id="epub-viewer" class="epub-viewer"></div>
         <div id="review-bar" class="review-bar">
@@ -189,10 +188,9 @@ function renderApp() {
             <h3>Toolbar</h3>
             <dl class="help-keys">
               <dt>&#9776; Contents</dt><dd>Open table of contents</dd>
-              <dt>&#10003; All known</dt><dd>Mark all words on page as known</dd>
-              <dt>&#128218; Vocab</dt><dd>Browse saved vocabulary</dd>
+              <dt>&#128218; Vocab</dt><dd>Browse and manage vocabulary (includes mark page as known)</dd>
               <dt>&#9673; Focus</dt><dd>Hide menus for distraction-free reading</dd>
-              <dt>&#10005; Close</dt><dd>Close book and return to start</dd>
+              <dt>&#8617; Close book</dt><dd>Close the current book</dd>
             </dl>
           </div>
           <div class="help-keyboard">
@@ -436,9 +434,6 @@ function bindEvents() {
   document.getElementById('btn-vocab').addEventListener('click', safeHandler(() => {
     return toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
   }));
-
-  // Mark all words on page as known (with undo)
-  document.getElementById('btn-mark-known').addEventListener('click', safeHandler(doMarkAllKnown));
 
   // Close book
   document.getElementById('btn-close-book').addEventListener('click', safeHandler(closeBook));

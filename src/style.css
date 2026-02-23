@@ -309,6 +309,9 @@ html, body {
   cursor: pointer;
   font-size: 13px;
   transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .toolbar-btn:hover {
@@ -671,10 +674,35 @@ html, body {
 
 .vocab-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.vocab-mark-page-btn {
+  width: 100%;
+  padding: 7px 0;
+  border: 1px solid var(--known);
+  border-radius: 4px;
+  background: var(--known-bg);
+  color: var(--known);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+  margin-bottom: 4px;
+}
+
+.vocab-mark-page-btn:hover:not(:disabled) {
+  background: var(--known);
+  color: #fff;
+}
+
+.vocab-mark-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .vocab-forget-btn {
