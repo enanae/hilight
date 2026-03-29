@@ -287,7 +287,9 @@ function positionPopup(popup, anchor, doc) {
       popup.style.left = '10px';
     }
     if (pr.bottom > win.innerHeight - 10) {
-      popup.style.top = `${rect.top - pr.height - 4}px`;
+      const aboveTop = rect.top - pr.height - 4;
+      // Clamp so popup doesn't go above the iframe viewport (hidden under header)
+      popup.style.top = aboveTop < 4 ? '4px' : `${aboveTop}px`;
     }
   });
 }

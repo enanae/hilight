@@ -283,13 +283,14 @@ describe('Keyboard Shortcuts', () => {
   });
 
   it('Escape closes settings modal, vocab panel, and TOC', () => {
-    // Open them first
+    // Settings modal traps keyboard — Escape closes it first
     document.getElementById('settings-modal').classList.add('open');
-    document.getElementById('toc-panel').classList.add('open');
-
     pressKey('Escape');
-
     expect(document.getElementById('settings-modal').classList.contains('open')).toBe(false);
+
+    // Then Escape closes remaining panels
+    document.getElementById('toc-panel').classList.add('open');
+    pressKey('Escape');
     expect(document.getElementById('toc-panel').classList.contains('open')).toBe(false);
     expect(closeVocabPanel).toHaveBeenCalled();
   });

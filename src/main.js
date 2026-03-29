@@ -290,9 +290,13 @@ function bindEvents() {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
-    // --- Help modal open? Only Escape and ? should work ---
+    // --- Modal open? Only Escape should work ---
     if (document.getElementById('help-modal').classList.contains('open')) {
       if (e.key === 'Escape' || e.key === '?') closeHelp();
+      return;
+    }
+    if (document.getElementById('settings-modal').classList.contains('open')) {
+      if (e.key === 'Escape') closeSettings();
       return;
     }
 
@@ -345,6 +349,7 @@ function bindEvents() {
           break;
         case 'Escape':
           e.preventDefault();
+          dismissPopup(iframeDoc);
           exitReviewMode();
           hideReviewBar();
           break;
@@ -376,21 +381,11 @@ function bindEvents() {
     }
 
     // --- Reading mode ---
+    // Panels/modals: only Escape and the panel's own toggle key should work
+    const tocOpen = document.getElementById('toc-panel').classList.contains('open');
+    const vocabOpen = state.vocab.panelEl?.classList.contains('open');
+
     switch (e.key) {
-      case 'ArrowLeft': prevPage(); break;
-      case 'ArrowRight': nextPage(); break;
-      case ' ':
-        e.preventDefault();
-        if (e.shiftKey) prevPage(); else nextPage();
-        break;
-      case 'Tab':
-      case 'Enter':
-        if (getIframeDocument()) {
-          e.preventDefault();
-          enterReviewMode(getIframeDocument());
-          showReviewBar();
-        }
-        break;
       case 'Escape':
         closeSettings();
         closeHelp();
@@ -401,22 +396,10 @@ function bindEvents() {
       case 'T':
         if (!e.ctrlKey && !e.metaKey) toggleToc();
         break;
-      case 'k':
-      case 'K':
-        if (!e.ctrlKey && !e.metaKey) {
-          doMarkAllKnown();
-        }
-        break;
       case 'v':
       case 'V':
         if (!e.ctrlKey && !e.metaKey) {
           toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
-        }
-        break;
-      case 'w':
-      case 'W':
-        if (!e.ctrlKey && !e.metaKey) {
-          if (document.getElementById('reader-area')?.classList.contains('open')) closeBook();
         }
         break;
       case '?':
@@ -426,6 +409,35 @@ function bindEvents() {
       case 'F':
         if (!e.ctrlKey && !e.metaKey) toggleFocusMode();
         break;
+      default:
+        // All other shortcuts are blocked when a panel is open
+        if (tocOpen || vocabOpen) return;
+        switch (e.key) {
+          case 'ArrowLeft': prevPage(); break;
+          case 'ArrowRight': nextPage(); break;
+          case ' ':
+            e.preventDefault();
+            if (e.shiftKey) prevPage(); else nextPage();
+            break;
+          case 'Tab':
+          case 'Enter':
+            if (getIframeDocument()) {
+              e.preventDefault();
+              enterReviewMode(getIframeDocument());
+              showReviewBar();
+            }
+            break;
+          case 'k':
+          case 'K':
+            if (!e.ctrlKey && !e.metaKey) doMarkAllKnown();
+            break;
+          case 'w':
+          case 'W':
+            if (!e.ctrlKey && !e.metaKey) {
+              if (document.getElementById('reader-area')?.classList.contains('open')) closeBook();
+            }
+            break;
+        }
     }
   }));
 
