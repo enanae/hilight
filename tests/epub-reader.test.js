@@ -213,7 +213,7 @@ describe('destroyEpub', () => {
     expect(offCalls).toContain('touchmove');
     expect(offCalls).toContain('touchend');
     expect(offCalls).toContain('click');
-    expect(offCalls).toContain('dblclick');
+    // dblclick is detected manually via click timing (epubjs doesn't forward native dblclick)
   });
 
   it('resets popup state', async () => {
@@ -888,7 +888,7 @@ describe('loadEpub', () => {
     expect(onCalls).toContain('touchmove');
     expect(onCalls).toContain('touchend');
     expect(onCalls).toContain('click');
-    expect(onCalls).toContain('dblclick');
+    // dblclick is detected manually via click timing (epubjs doesn't forward native dblclick)
   });
 
   it('click handler calls handleWordTap for a hl-word span', async () => {
@@ -905,7 +905,7 @@ describe('loadEpub', () => {
     span.dataset.level = '0';
 
     clickHandler({ target: span });
-    // Click is delayed 250ms to allow dblclick detection
+    // Click is delayed 400ms to allow double-click detection
     await vi.waitFor(() => {
       expect(handleWordTap).toHaveBeenCalledWith(span, onStats);
     });

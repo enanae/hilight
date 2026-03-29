@@ -236,15 +236,16 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     }
   });
 
-  // Desktop only: click cycles state, dblclick shows definition.
+  // Desktop only: click cycles state, double-click shows definition.
   // On touch devices the browser fires a synthetic click after touchend —
   // skip it by checking hadTouchRecently.
   //
-  // Double-click detection: we delay the single-click action by a short
-  // window so that if a dblclick follows, we show the definition instead
-  // of cycling the word level. This prevents the "click fires, then
-  // dblclick fires but word already cycled" race condition.
+  // Double-click detection: epubjs does NOT forward native dblclick events,
+  // so we detect double-clicks manually by tracking click timing. If two
+  // clicks on the same word happen within 400ms, treat as double-click
+  // (show definition). Otherwise, treat as single click (cycle word level).
   let clickTimer = null;
+  let lastClickSpan = null;
 
   eventScope.on('click', (e) => {
     if (hadTouchRecently) {
@@ -260,29 +261,30 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     if (!span) return;
 
     const now = Date.now();
-    if (now - lastActionTime < DEBOUNCE_MS) return;
+    if (now - lastActionTime < 100) return; // prevent rapid re-entry
 
-    // Delay single-click to allow dblclick to cancel it
+    // Second click on same word within 400ms = double-click → show definition
+    if (clickTimer && lastClickSpan === span) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+      lastClickSpan = null;
+      lastActionTime = now;
+      state.lastInteractedWord = span;
+      showWordDefinition(span);
+      return;
+    }
+
+    // First click: wait 400ms to see if a second click follows
     clearTimeout(clickTimer);
+    lastClickSpan = span;
     clickTimer = setTimeout(() => {
       clickTimer = null;
+      lastClickSpan = null;
       lastActionTime = Date.now();
       state.lastInteractedWord = span;
       handleWordTap(span, onStatsUpdate);
       window.focus();
-    }, 250);
-  });
-
-  eventScope.on('dblclick', (e) => {
-    // Cancel the pending single-click action
-    clearTimeout(clickTimer);
-    clickTimer = null;
-    if (isPopupActive()) return;
-    const span = findWordSpan(e.target);
-    if (!span) return;
-    lastActionTime = Date.now();
-    state.lastInteractedWord = span;
-    showWordDefinition(span);
+    }, 400);
   });
 
   // Desktop long-press: mousedown starts timer, mouseup/mousemove cancels.
