@@ -45,7 +45,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  padding: 8px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -53,7 +53,7 @@ html, body {
 
 .header-left {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 
@@ -62,18 +62,18 @@ html, body {
   font-weight: 800;
   letter-spacing: -0.5px;
   color: var(--accent);
-  text-shadow: 0 0 20px var(--accent-glow);
+  text-shadow: 0 0 12px var(--accent-glow);
+  line-height: 1.1;
 }
 
 .version {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   color: var(--text-muted);
   text-shadow: none;
   line-height: 1;
-  margin-top: -2px;
 }
 
 .tagline {
@@ -153,7 +153,7 @@ html, body {
 /* === Stats Bar === */
 .stats-bar {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   padding: 6px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -165,7 +165,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   font-weight: 600;
 }
@@ -175,7 +175,8 @@ html, body {
 .stat-label {
   font-weight: 400;
   font-size: 11px;
-  opacity: 0.75;
+  color: inherit;
+  opacity: 0.8;
 }
 
 .stat-unknown { color: var(--unknown); background: var(--unknown-bg); }
@@ -211,6 +212,7 @@ html, body {
 .upload-content {
   text-align: center;
   padding: 40px;
+  max-width: 520px;
 }
 
 .upload-icon {
@@ -288,6 +290,11 @@ html, body {
 .upload-gutenberg a {
   color: var(--accent);
   text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.upload-gutenberg a:hover {
+  color: #c084fc;
 }
 
 /* === Reader === */
@@ -304,19 +311,19 @@ html, body {
 .reader-toolbar {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 8px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .toolbar-btn {
-  padding: 4px 10px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
   font-size: 13px;
   transition: all 0.15s;
@@ -904,20 +911,24 @@ html, body {
 
 /* === Reading Hint === */
 .reading-hint {
-  display: none;
+  display: flex;
   justify-content: center;
   align-items: center;
   gap: 6px;
-  padding: 5px 16px;
+  padding: 0 20px;
+  max-height: 0;
+  overflow: hidden;
   background: var(--surface);
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
+  transition: max-height 0.2s ease, padding 0.2s ease;
 }
 
 .reading-hint.visible {
-  display: flex;
+  max-height: 40px;
+  padding: 8px 20px;
 }
 
 .reading-hint kbd {
@@ -932,26 +943,30 @@ html, body {
 
 /* === Review Bar === */
 .review-bar {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 16px;
+  padding: 0 20px;
+  max-height: 0;
+  overflow: hidden;
   background: var(--surface);
   border-top: 1px solid var(--accent);
   font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
   flex-wrap: wrap;
+  transition: max-height 0.2s ease, padding 0.2s ease;
 }
 
 .review-bar.visible {
-  display: flex;
+  max-height: 50px;
+  padding: 8px 20px;
 }
 
 .review-bar-label {
   font-weight: 700;
   color: var(--accent);
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   font-size: 11px;
 }
 
