@@ -5,7 +5,7 @@ import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId,
 import { isPopupActive, dismissPopup, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 import { state } from './app-state.js';
-import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
+import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, focusWordAbove, focusWordBelow, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
 import { escapeHtml, showUndoToast, showError } from './ui-utils.js';
 
 const LANGUAGES = [
@@ -353,8 +353,7 @@ function bindEvents() {
           exitReviewMode();
           hideReviewBar();
           break;
-        case 'ArrowRight':
-        case 'ArrowDown': {
+        case 'ArrowRight': {
           e.preventDefault();
           const result = focusNextWord(iframeDoc);
           if (result === 'end') {
@@ -364,10 +363,29 @@ function bindEvents() {
           }
           break;
         }
-        case 'ArrowLeft':
-        case 'ArrowUp': {
+        case 'ArrowLeft': {
           e.preventDefault();
           const result = focusPrevWord(iframeDoc);
+          if (result === 'start') {
+            state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'backward';
+            await prevPage();
+          }
+          break;
+        }
+        case 'ArrowDown': {
+          e.preventDefault();
+          const result = focusWordBelow(iframeDoc);
+          if (result === 'end') {
+            state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'forward';
+            await nextPage();
+          }
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const result = focusWordAbove(iframeDoc);
           if (result === 'start') {
             state.reviewPendingResume = true;
             state.reviewResumeDirection = 'backward';

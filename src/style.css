@@ -344,6 +344,7 @@ html, body {
 
 .book-title {
   flex: 1;
+  min-width: 120px;
   font-weight: 600;
   font-size: 14px;
   overflow: hidden;

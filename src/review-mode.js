@@ -177,6 +177,84 @@ export function isShowingAll() {
   return state.reviewShowAll;
 }
 
+/**
+ * Focus the nearest word on the line above the current word (spatial nav).
+ * @param {Document} iframeDoc
+ * @returns {'moved'|'start'}
+ */
+export function focusWordAbove(iframeDoc) {
+  return focusWordSpatial(iframeDoc, 'up');
+}
+
+/**
+ * Focus the nearest word on the line below the current word (spatial nav).
+ * @param {Document} iframeDoc
+ * @returns {'moved'|'end'}
+ */
+export function focusWordBelow(iframeDoc) {
+  return focusWordSpatial(iframeDoc, 'down');
+}
+
+/**
+ * Spatial word navigation: find the nearest word on an adjacent line.
+ * Uses bounding rects to determine line positions, then picks the word
+ * on the target line whose horizontal center is closest to the current word's.
+ */
+function focusWordSpatial(iframeDoc, direction) {
+  if (!iframeDoc) return direction === 'up' ? 'start' : 'end';
+  const words = getFilteredWordList(iframeDoc);
+  if (words.length === 0) return direction === 'up' ? 'start' : 'end';
+
+  const current = state.reviewFocusedWord;
+  if (!current) {
+    focusWord(direction === 'up' ? words[words.length - 1] : words[0]);
+    return 'moved';
+  }
+
+  const currentRect = current.getBoundingClientRect();
+  const currentCenterX = currentRect.left + currentRect.width / 2;
+  const currentCenterY = currentRect.top + currentRect.height / 2;
+  const LINE_THRESHOLD = 5; // words within 5px y are on the same line
+
+  // Find words on adjacent lines
+  let candidates = [];
+  for (const w of words) {
+    if (w === current) continue;
+    const rect = w.getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2;
+    if (direction === 'up' && centerY < currentCenterY - LINE_THRESHOLD) {
+      candidates.push({ word: w, centerX: rect.left + rect.width / 2, centerY });
+    } else if (direction === 'down' && centerY > currentCenterY + LINE_THRESHOLD) {
+      candidates.push({ word: w, centerX: rect.left + rect.width / 2, centerY });
+    }
+  }
+
+  if (candidates.length === 0) return direction === 'up' ? 'start' : 'end';
+
+  // Find the nearest line (closest y to current)
+  candidates.sort((a, b) =>
+    direction === 'up'
+      ? b.centerY - a.centerY  // highest y first (closest line above)
+      : a.centerY - b.centerY  // lowest y first (closest line below)
+  );
+  const targetLineY = candidates[0].centerY;
+  const lineWords = candidates.filter(c => Math.abs(c.centerY - targetLineY) < LINE_THRESHOLD);
+
+  // Pick the word on that line closest in x to the current word
+  let best = lineWords[0];
+  let bestDist = Math.abs(best.centerX - currentCenterX);
+  for (let i = 1; i < lineWords.length; i++) {
+    const dist = Math.abs(lineWords[i].centerX - currentCenterX);
+    if (dist < bestDist) {
+      best = lineWords[i];
+      bestDist = dist;
+    }
+  }
+
+  focusWord(best.word);
+  return 'moved';
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────
 
 /**

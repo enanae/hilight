@@ -19,6 +19,7 @@ export function destroyEpub() {
   state.cachedBookWords = null;
   state.cachedBookId = null;
   state.cachedBookLang = null;
+  state.emptySkipCount = 0;
   // Clean up managed scroll listener before destroying rendition
   if (state.scrollCleanup) {
     state.scrollCleanup();
