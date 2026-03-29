@@ -213,6 +213,18 @@ async function showDefinition(anchor, language, word) {
       html += '</li>';
     }
     html += '</ul>';
+    // Show stem word definitions when this is an inflected form
+    if (result.stemWord && result.stemDefinitions?.length > 0) {
+      html += `<div class="hl-popup-word" style="margin-top:8px;padding-top:8px;border-top:1px solid #2a2a3a">${escapeHtml(result.stemWord)}`;
+      html += '</div><ul class="hl-popup-defs">';
+      for (const d of result.stemDefinitions) {
+        html += '<li>';
+        if (d.partOfSpeech) html += `<em>${escapeHtml(d.partOfSpeech)}</em> `;
+        html += escapeHtml(d.definition);
+        html += '</li>';
+      }
+      html += '</ul>';
+    }
     popup.innerHTML = html;
   }
 

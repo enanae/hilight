@@ -104,6 +104,7 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
       options.onEmptySection();
     }
 
+
     // Resume review mode after section change if pending
     if (state.reviewPendingResume) {
       state.reviewPendingResume = false;
@@ -213,6 +214,7 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
       lastActionTime = now;
       state.lastInteractedWord = span;
       handleWordTap(span, onStatsUpdate);
+      window.focus();
     }
   });
 
@@ -237,6 +239,9 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     lastActionTime = now;
     state.lastInteractedWord = span;
     handleWordTap(span, onStatsUpdate);
+    // Refocus parent window so keyboard shortcuts (arrows, Tab, etc.)
+    // continue to work after clicking a word inside the iframe.
+    window.focus();
   });
 
   eventScope.on('dblclick', (e) => {
@@ -532,6 +537,12 @@ function setupChapterBanners(container, viewerEl) {
     });
     viewerEl.appendChild(startBanner);
   }
+
+  // Always reserve space so banners don't overlap content.
+  // The banners are position:absolute on the viewerEl, overlaying the container.
+  // Adding padding to the container pushes the iframe content below/above them.
+  container.style.paddingTop = '36px';
+  container.style.paddingBottom = '36px';
 
   const onScroll = () => {
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;

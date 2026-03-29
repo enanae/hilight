@@ -59,9 +59,43 @@ function stripHtml(html) {
 }
 
 /**
+ * Extract a stem/lemma word from a Wiktionary "form-of" definition.
+ * These definitions look like: "third-person plural future indicative of <a>desaparecer</a>"
+ * Returns the stem word if found, null otherwise.
+ */
+function extractStemWord(definitionHtml) {
+  if (!definitionHtml) return null;
+  // Look for the pattern: form-of-definition-link containing an <a> tag with the stem word
+  const match = definitionHtml.match(/form-of-definition-link[^>]*>.*?<a[^>]*>([^<]+)<\/a>/);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Check if the primary definition is a "form-of" reference (inflected form).
+ * Looks at the first definition across all sections — if it references a
+ * stem/lemma word, returns that word. This handles conjugated verbs
+ * ("third-person plural future of desaparecer"), plural nouns
+ * ("plural of libro"), and other inflections.
+ */
+function findStemWord(sections) {
+  if (!sections || sections.length === 0) return null;
+  for (const section of sections) {
+    for (const d of (section.definitions || [])) {
+      if (!d.definition) continue;
+      return extractStemWord(d.definition);
+    }
+  }
+  return null;
+}
+
+/**
  * Parse Wiktionary REST API response.
  * Response shape: { "<lang>": [ { partOfSpeech, language, definitions: [{ definition }] } ] }
  * Definitions contain HTML which we strip.
+ *
+ * If all definitions are "form-of" references (e.g. "plural of X",
+ * "third-person future of Y"), sets result.stemWord so the caller
+ * can auto-fetch the stem word's definition too.
  */
 function parseWiktionary(data, lang, defLang) {
   if (!data || typeof data !== 'object') return null;
@@ -69,9 +103,11 @@ function parseWiktionary(data, lang, defLang) {
   // The response is keyed by language code. Priority:
   // 1. Try the definition language (user's native language) for bilingual use
   // 2. Try the book language
-  // 3. Fall back to any available key
+  // 3. Try "other" (Wiktionary groups Norwegian Bokmål/Nynorsk and some
+  //    other languages under this key)
+  // 4. Fall back to any available key
   let sections = null;
-  for (const tryLang of [defLang, lang]) {
+  for (const tryLang of [defLang, lang, 'other']) {
     if (tryLang && Array.isArray(data[tryLang]) && data[tryLang].length > 0) {
       sections = data[tryLang];
       break;
@@ -88,6 +124,9 @@ function parseWiktionary(data, lang, defLang) {
   }
   if (!sections || sections.length === 0) return null;
 
+  // Check if this is a "form-of" entry before stripping HTML
+  const stemWord = findStemWord(sections);
+
   const defs = [];
   for (const section of sections) {
     const pos = section.partOfSpeech || '';
@@ -100,11 +139,13 @@ function parseWiktionary(data, lang, defLang) {
   }
   if (defs.length === 0) return null;
 
-  return {
+  const result = {
     word: '', // filled in by caller from the lookup word
     phonetic: '',
     definitions: defs.slice(0, 6),
   };
+  if (stemWord) result.stemWord = stemWord;
+  return result;
 }
 
 /**
@@ -249,7 +290,25 @@ export async function lookupWord(language, word) {
     const result = provider.parse(data, language, dl);
     // Fill in word if parser didn't
     if (result && !result.word) result.word = word;
-    return result || { error: 'not-found' };
+    if (!result) return { error: 'not-found' };
+
+    // Auto-fetch stem word definition when the result is a "form-of" entry
+    // (e.g. "third-person plural future of desaparecer" → also fetch "desaparecer")
+    if (result.stemWord && result.stemWord !== word) {
+      try {
+        const stemUrl = provider.buildUrl(language, result.stemWord);
+        const stemRes = await fetch(stemUrl);
+        if (stemRes.ok) {
+          const stemData = await stemRes.json();
+          const stemResult = provider.parse(stemData, language, dl);
+          if (stemResult && stemResult.definitions?.length > 0) {
+            result.stemDefinitions = stemResult.definitions;
+          }
+        }
+      } catch { /* stem lookup is best-effort */ }
+    }
+
+    return result;
   } catch (err) {
     // Network errors (offline, DNS failure, CORS, timeout)
     if (err instanceof TypeError) return { error: 'offline' };
