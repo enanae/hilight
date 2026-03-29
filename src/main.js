@@ -200,6 +200,15 @@ function renderApp() {
             </label>
           </div>
           <div class="settings-section">
+            <h3>Reading</h3>
+            <label class="settings-label">Font size: <span id="font-size-value">${state.fontSize}px</span>
+              <input type="range" id="settings-font-size" class="input-full" min="12" max="24" step="1" value="${state.fontSize}" />
+            </label>
+            <div id="font-preview" class="font-preview" style="font-size:${state.fontSize}px">
+              The quick brown fox jumps over the lazy dog.
+            </div>
+          </div>
+          <div class="settings-section">
             <h3>Dictionary</h3>
           <p>Dictionary for <strong id="settings-lang-name"></strong>:</p>
           <label>
@@ -730,6 +739,15 @@ function bindEvents() {
     document.getElementById('def-lang-select').value = state.defLanguage;
   });
 
+  // Font size slider
+  document.getElementById('settings-font-size')?.addEventListener('input', (e) => {
+    state.fontSize = parseInt(e.target.value, 10);
+    localStorage.setItem('hilight-font-size', state.fontSize);
+    document.getElementById('font-size-value').textContent = `${state.fontSize}px`;
+    document.getElementById('font-preview').style.fontSize = `${state.fontSize}px`;
+    applyFontSize();
+  });
+
   // Open book (from reader toolbar)
   document.getElementById('btn-open-book').addEventListener('click', () => {
     document.getElementById('file-input').click();
@@ -950,6 +968,25 @@ function openSettings() {
 
 function closeSettings() {
   document.getElementById('settings-modal').classList.remove('open');
+}
+
+function applyFontSize() {
+  // Apply to main epub iframe
+  const iframe = document.querySelector('#epub-viewer iframe');
+  if (iframe?.contentDocument) {
+    const html = iframe.contentDocument.documentElement;
+    const body = iframe.contentDocument.body;
+    if (html) html.style.setProperty('font-size', `${state.fontSize}px`, 'important');
+    if (body) body.style.setProperty('font-size', `${state.fontSize}px`, 'important');
+  }
+  // Apply to reference iframe
+  const refIframe = document.querySelector('#ref-viewer iframe');
+  if (refIframe?.contentDocument) {
+    const html = refIframe.contentDocument.documentElement;
+    const body = refIframe.contentDocument.body;
+    if (html) html.style.setProperty('font-size', `${state.fontSize}px`, 'important');
+    if (body) body.style.setProperty('font-size', `${state.fontSize}px`, 'important');
+  }
 }
 
 function onProviderChange() {

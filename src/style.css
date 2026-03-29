@@ -729,6 +729,17 @@ body.ref-resizing iframe {
   margin-bottom: 8px;
 }
 
+.font-preview {
+  padding: 12px 16px;
+  margin-top: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  line-height: 1.6;
+  transition: font-size 0.15s ease;
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;

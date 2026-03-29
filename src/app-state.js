@@ -11,6 +11,9 @@ export const state = {
   currentLanguage: localStorage.getItem('hilight-lang') || 'en',
   defLanguage: localStorage.getItem('hilight-def-lang') || 'en',
 
+  // Reading preferences
+  fontSize: parseInt(typeof localStorage !== 'undefined' ? localStorage.getItem('hilight-font-size') || '16' : '16', 10),
+
   // Book lifecycle — previously in epub-reader.js + main.js
   currentBook: null,
   currentRendition: null,

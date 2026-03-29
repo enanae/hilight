@@ -89,37 +89,40 @@ async function loadReferenceEpub(file, viewerEl) {
   // Inject dark-mode styles (read-only, no word highlighting)
   rendition.hooks.content.register((contents) => {
     const doc = contents.document;
+    doc.body.id = 'hilight-dark-theme';
     const style = doc.createElement('style');
     style.textContent = `
-      *, *::before, *::after {
+      html {
+        font-size: ${state.fontSize || 16}px !important;
+        background: #12121a !important;
+      }
+      #hilight-dark-theme,
+      #hilight-dark-theme * {
+        background: transparent !important;
         background-color: transparent !important;
+        background-image: none !important;
+        color: #e0dfe6 !important;
         border-color: #2a2a3a !important;
       }
-      html {
-        font-size: 16px !important;
-      }
-      html, body {
+      #hilight-dark-theme {
         background: #12121a !important;
         background-color: #12121a !important;
         font-size: 16px !important;
         line-height: 1.6 !important;
-      }
-      body {
         -webkit-user-select: text;
         user-select: text;
         padding-top: 16px !important;
         padding-bottom: 16px !important;
       }
-      body, body * {
-        color: #e0dfe6 !important;
-      }
-      a, a:link, a:visited, a:active {
+      #hilight-dark-theme a,
+      #hilight-dark-theme a:link,
+      #hilight-dark-theme a:visited,
+      #hilight-dark-theme a:active {
         color: #a78bfa !important;
         text-decoration: underline;
       }
       img, svg, video, canvas {
         max-width: 100%;
-        background-color: transparent !important;
       }
     `;
     doc.head.appendChild(style);

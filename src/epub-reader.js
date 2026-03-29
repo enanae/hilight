@@ -656,6 +656,10 @@ function injectTapZones(doc) {
 
 /** Inject highlight CSS into the epub's iframe document. */
 function injectStyles(doc) {
+  // Add ID to body for high-specificity dark theme overrides
+  doc.body.id = 'hilight-dark-theme';
+  const fontSize = state.fontSize || 16;
+
   const style = doc.createElement('style');
   style.textContent = `
     body {
@@ -669,33 +673,49 @@ function injectStyles(doc) {
          the epubjs container div handles scrolling in scrolled-doc mode. */
       overflow: hidden !important;
     }
-    /* Force dark theme on ALL elements — overrides epub stylesheets that
-       use !important on background/color (e.g. Bootstrap-based EPUBs).
-       Uses wildcard selector for maximum specificity. */
-    *, *::before, *::after {
+    /* Force dark theme — overrides epub stylesheets including Bootstrap.
+       Uses #hilight-dark-theme ID on body for maximum specificity to beat
+       any !important rules from epub CSS (id > class > element). */
+    html {
+      font-size: ${fontSize}px !important;
+      background: #12121a !important;
+    }
+    #hilight-dark-theme,
+    #hilight-dark-theme *:not(.hl-word) {
+      background: transparent !important;
       background-color: transparent !important;
+      background-image: none !important;
+      color: #e0dfe6 !important;
       border-color: #2a2a3a !important;
     }
-    html {
-      font-size: 16px !important;
+    /* Restore popup background — override the transparent rule above */
+    #hilight-dark-theme .hl-popup {
+      background: #1a1a26 !important;
+      background-color: #1a1a26 !important;
+      border-color: #2a2a3a !important;
     }
-    html, body {
-      background: #12121a !important;
-      background-color: #12121a !important;
-      font-size: 16px !important;
-      line-height: 1.6 !important;
-    }
-    /* Force all text to light color */
-    body, body * {
+    #hilight-dark-theme .hl-popup * {
+      background: transparent !important;
       color: #e0dfe6 !important;
     }
-    a, a:link, a:visited, a:active {
+    #hilight-dark-theme .hl-popup-word {
+      color: #a855f7 !important;
+    }
+    #hilight-dark-theme {
+      background: #12121a !important;
+      background-color: #12121a !important;
+      font-size: ${fontSize}px !important;
+      line-height: 1.6 !important;
+    }
+    #hilight-dark-theme a,
+    #hilight-dark-theme a:link,
+    #hilight-dark-theme a:visited,
+    #hilight-dark-theme a:active {
       color: #a78bfa !important;
       text-decoration: underline;
     }
     img, svg, video, canvas {
       max-width: 100%;
-      background-color: transparent !important;
     }
     .hl-word {
       cursor: pointer;
