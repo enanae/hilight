@@ -91,6 +91,13 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
 
     injectStyles(doc);
 
+    // Set touch-action on the iframe element itself (in the parent document)
+    // so the browser lets vertical pan gestures scroll the manager container.
+    const iframe = doc.defaultView?.frameElement;
+    if (iframe) {
+      iframe.style.touchAction = 'pan-y';
+    }
+
     // Show loading overlay while highlighting (can be slow on large chapters)
     showLoadingOverlay(viewerEl);
     try {
@@ -598,6 +605,11 @@ function setupChapterBanners(container, viewerEl) {
 function injectStyles(doc) {
   const style = doc.createElement('style');
   style.textContent = `
+    html, body {
+      /* Allow the browser compositor to recognise vertical pan (scroll)
+         gestures so they propagate to the parent scroll container. */
+      touch-action: pan-y !important;
+    }
     body {
       background: #12121a !important;
       color: #e0dfe6 !important;
