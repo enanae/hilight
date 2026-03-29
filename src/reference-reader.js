@@ -99,6 +99,10 @@ async function loadReferenceEpub(file, viewerEl) {
         padding-top: 16px !important;
         padding-bottom: 16px !important;
       }
+      html, body, div, section, article, aside, main, nav, header, footer {
+        background: #12121a !important;
+        background-color: #12121a !important;
+      }
       p, span, div, li, td, th, dt, dd, blockquote, figcaption,
       h1, h2, h3, h4, h5, h6 {
         color: inherit !important;

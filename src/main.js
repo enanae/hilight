@@ -28,6 +28,9 @@ const LANGUAGES = [
   { code: 'pl', name: 'Polish' },
   { code: 'nl', name: 'Dutch' },
   { code: 'sv', name: 'Swedish' },
+  { code: 'nb', name: 'Norwegian' },
+  { code: 'da', name: 'Danish' },
+  { code: 'fi', name: 'Finnish' },
 ];
 
 // State is centralized in app-state.js — state.currentLanguage, state.defLanguage, state.currentBookId

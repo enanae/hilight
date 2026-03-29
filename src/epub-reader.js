@@ -669,6 +669,12 @@ function injectStyles(doc) {
          the epubjs container div handles scrolling in scrolled-doc mode. */
       overflow: hidden !important;
     }
+    /* Force dark background on all container elements — some EPUBs set
+       white backgrounds on divs, sections, or other wrappers. */
+    html, body, div, section, article, aside, main, nav, header, footer {
+      background: #12121a !important;
+      background-color: #12121a !important;
+    }
     /* Force all text to light color on dark background.
        Scoped to common text elements to avoid clobbering SVGs / code blocks. */
     p, span, div, li, td, th, dt, dd, blockquote, figcaption,
@@ -684,6 +690,11 @@ function injectStyles(doc) {
     }
     img {
       max-width: 100%;
+    }
+    /* Normalize oversized fonts from epub stylesheets */
+    body {
+      font-size: 16px !important;
+      line-height: 1.6 !important;
     }
     .hl-word {
       cursor: pointer;
