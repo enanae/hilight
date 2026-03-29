@@ -91,27 +91,36 @@ async function loadReferenceEpub(file, viewerEl) {
     const doc = contents.document;
     const style = doc.createElement('style');
     style.textContent = `
-      body {
+      *, *::before, *::after {
+        background-color: transparent !important;
+        border-color: #2a2a3a !important;
+      }
+      html {
+        font-size: 16px !important;
+      }
+      html, body {
         background: #12121a !important;
-        color: #e0dfe6 !important;
+        background-color: #12121a !important;
+        font-size: 16px !important;
+        line-height: 1.6 !important;
+      }
+      body {
         -webkit-user-select: text;
         user-select: text;
         padding-top: 16px !important;
         padding-bottom: 16px !important;
       }
-      html, body, div, section, article, aside, main, nav, header, footer {
-        background: #12121a !important;
-        background-color: #12121a !important;
-      }
-      p, span, div, li, td, th, dt, dd, blockquote, figcaption,
-      h1, h2, h3, h4, h5, h6 {
-        color: inherit !important;
+      body, body * {
+        color: #e0dfe6 !important;
       }
       a, a:link, a:visited, a:active {
         color: #a78bfa !important;
         text-decoration: underline;
       }
-      img { max-width: 100%; }
+      img, svg, video, canvas {
+        max-width: 100%;
+        background-color: transparent !important;
+      }
     `;
     doc.head.appendChild(style);
   });

@@ -669,32 +669,33 @@ function injectStyles(doc) {
          the epubjs container div handles scrolling in scrolled-doc mode. */
       overflow: hidden !important;
     }
-    /* Force dark background on all container elements — some EPUBs set
-       white backgrounds on divs, sections, or other wrappers. */
-    html, body, div, section, article, aside, main, nav, header, footer {
+    /* Force dark theme on ALL elements — overrides epub stylesheets that
+       use !important on background/color (e.g. Bootstrap-based EPUBs).
+       Uses wildcard selector for maximum specificity. */
+    *, *::before, *::after {
+      background-color: transparent !important;
+      border-color: #2a2a3a !important;
+    }
+    html {
+      font-size: 16px !important;
+    }
+    html, body {
       background: #12121a !important;
       background-color: #12121a !important;
+      font-size: 16px !important;
+      line-height: 1.6 !important;
     }
-    /* Force all text to light color on dark background.
-       Scoped to common text elements to avoid clobbering SVGs / code blocks. */
-    p, span, div, li, td, th, dt, dd, blockquote, figcaption,
-    h1, h2, h3, h4, h5, h6 {
-      color: inherit !important;
+    /* Force all text to light color */
+    body, body * {
+      color: #e0dfe6 !important;
     }
     a, a:link, a:visited, a:active {
       color: #a78bfa !important;
       text-decoration: underline;
     }
-    h1, h2, h3, h4, h5, h6 {
-      color: #e0dfe6 !important;
-    }
-    img {
+    img, svg, video, canvas {
       max-width: 100%;
-    }
-    /* Normalize oversized fonts from epub stylesheets */
-    body {
-      font-size: 16px !important;
-      line-height: 1.6 !important;
+      background-color: transparent !important;
     }
     .hl-word {
       cursor: pointer;
