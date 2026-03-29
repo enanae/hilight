@@ -85,7 +85,7 @@ describe('App Rendering', () => {
   it('renders the app header with logo and tagline', () => {
     const header = document.querySelector('.app-header');
     expect(header).not.toBeNull();
-    expect(header.querySelector('.logo').textContent).toBe('hilight');
+    expect(header.querySelector('.logo').textContent).toContain('hilight');
     expect(header.querySelector('.tagline').textContent).toContain('free epub vocabulary builder');
   });
 

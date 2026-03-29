@@ -2,7 +2,7 @@ import './style.css';
 import { loadEpub, nextPage, prevPage, getToc, goToHref, getIframeDocument, destroyEpub, setLanguage } from './epub-reader.js';
 import { getStats, exportVocab, importVocab } from './vocab-store.js';
 import { saveDictSettings, loadDictSettings, hasDictionary, getActiveProviderId, getProviderChoices } from './dictionary.js';
-import { isPopupActive, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
+import { isPopupActive, dismissPopup, markAllKnown, restoreWordLevels, setWordLevel, showWordDefinition } from './highlighter.js';
 import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBookState as resetVocabBookState } from './vocab-browser.js';
 import { state } from './app-state.js';
 import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
@@ -42,7 +42,7 @@ function renderApp() {
   document.querySelector('#app').innerHTML = `
     <header class="app-header">
       <div class="header-left">
-        <h1 class="logo">hilight</h1>
+        <h1 class="logo">hilight<span class="version">v1.1.0</span></h1>
         <span class="tagline">free epub vocabulary builder</span>
       </div>
       <div class="header-right">
@@ -281,9 +281,12 @@ function bindEvents() {
     localStorage.setItem('hilight-def-lang', state.defLanguage);
   });
 
-  // Keyboard shortcuts — suppressed while popup showing or typing in inputs
+  // Keyboard shortcuts — dismiss popup on any key, then continue
   document.addEventListener('keydown', safeHandler(async (e) => {
-    if (isPopupActive()) return;
+    if (isPopupActive()) {
+      dismissPopup(getIframeDocument());
+      return;
+    }
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
@@ -341,19 +344,32 @@ function bindEvents() {
           updateReviewBarFilter();
           break;
         case 'Escape':
+          e.preventDefault();
           exitReviewMode();
           hideReviewBar();
-          break;
-        case 'ArrowLeft':
-          exitReviewMode();
-          hideReviewBar();
-          prevPage();
           break;
         case 'ArrowRight':
-          exitReviewMode();
-          hideReviewBar();
-          nextPage();
+        case 'ArrowDown': {
+          e.preventDefault();
+          const result = focusNextWord(iframeDoc);
+          if (result === 'end') {
+            state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'forward';
+            await nextPage();
+          }
           break;
+        }
+        case 'ArrowLeft':
+        case 'ArrowUp': {
+          e.preventDefault();
+          const result = focusPrevWord(iframeDoc);
+          if (result === 'start') {
+            state.reviewPendingResume = true;
+            state.reviewResumeDirection = 'backward';
+            await prevPage();
+          }
+          break;
+        }
         default: return; // don't preventDefault for unhandled keys
       }
       return;

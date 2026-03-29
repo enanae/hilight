@@ -28,6 +28,16 @@ export function resetPopupState() {
   state.popupActive = false;
 }
 
+/** Dismiss any visible definition popup. Returns true if a popup was closed. */
+export function dismissPopup(iframeDoc) {
+  if (!state.popupActive) return false;
+  const doc = iframeDoc || document;
+  const popup = doc.querySelector('.hl-popup');
+  if (popup) popup.remove();
+  state.popupActive = false;
+  return true;
+}
+
 /**
  * Highlight all words in a container element.
  * Walks the DOM, finds text nodes, replaces them with word spans.

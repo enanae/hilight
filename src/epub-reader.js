@@ -99,9 +99,20 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
       hideLoadingOverlay(viewerEl);
     }
 
-    // Notify caller if section has no highlightable words (e.g. cover page)
-    if (doc.querySelectorAll('.hl-word').length === 0 && options.onEmptySection) {
-      options.onEmptySection();
+    // Auto-skip sections with no highlightable words (cover pages, blank
+    // separators, image-only pages). Continues in the current navigation
+    // direction, with a cap to avoid infinite loops in all-empty books.
+    if (doc.querySelectorAll('.hl-word').length === 0) {
+      if (options.onEmptySection) options.onEmptySection();
+      state.emptySkipCount = (state.emptySkipCount || 0) + 1;
+      if (state.emptySkipCount < 10 && state.currentRendition) {
+        const forward = state.lastNavDirection !== 'backward';
+        if (forward) state.currentRendition.next();
+        else state.currentRendition.prev();
+        return;
+      }
+    } else {
+      state.emptySkipCount = 0;
     }
 
 
@@ -300,6 +311,7 @@ function findWordSpan(target) {
  */
 export function nextPage() {
   if (!state.currentRendition) return;
+  state.lastNavDirection = 'forward';
   const container = getScrollContainer();
   if (container) {
     const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 5;
@@ -314,6 +326,7 @@ export function nextPage() {
 /** Navigate to previous page/section. Scrolls up first, then prev section. */
 export function prevPage() {
   if (!state.currentRendition) return;
+  state.lastNavDirection = 'backward';
   const container = getScrollContainer();
   if (container) {
     if (container.scrollTop > 5) {
