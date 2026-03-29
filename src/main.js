@@ -43,7 +43,7 @@ function renderApp() {
   document.querySelector('#app').innerHTML = `
     <header class="app-header">
       <div class="header-left">
-        <h1 class="logo">hilight<span class="version">v1.1.0</span></h1>
+        <h1 class="logo">hilight<span class="version">v1.2.0</span></h1>
         <span class="tagline">free epub vocabulary builder</span>
       </div>
       <div class="header-right">
