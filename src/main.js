@@ -175,10 +175,29 @@ function renderApp() {
       <div class="modal-backdrop"></div>
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Dictionary Settings</h2>
+          <h2>Settings</h2>
           <button id="btn-close-settings" class="toolbar-btn">&#10005;</button>
         </div>
         <div class="modal-body">
+          <div class="settings-section">
+            <h3>Languages</h3>
+            <label class="settings-label">Book language:
+              <select id="settings-book-lang" class="input-full">
+                ${LANGUAGES.map(l =>
+                  `<option value="${l.code}" ${l.code === state.currentLanguage ? 'selected' : ''}>${l.name}</option>`
+                ).join('')}
+              </select>
+            </label>
+            <label class="settings-label">Definition language:
+              <select id="settings-def-lang" class="input-full">
+                ${LANGUAGES.map(l =>
+                  `<option value="${l.code}" ${l.code === state.defLanguage ? 'selected' : ''}>${l.name}</option>`
+                ).join('')}
+              </select>
+            </label>
+          </div>
+          <div class="settings-section">
+            <h3>Dictionary</h3>
           <p>Dictionary for <strong id="settings-lang-name"></strong>:</p>
           <label>
             Provider:
@@ -196,6 +215,7 @@ function renderApp() {
                 placeholder="https://api.example.com/{lang}/{word}" />
             </label>
             <p class="hint">Use <code>{word}</code> for the word and <code>{lang}</code> for the language code.</p>
+          </div>
           </div>
           <div class="modal-actions">
             <button id="btn-save-dict" class="btn-primary">Save</button>
@@ -685,6 +705,28 @@ function bindEvents() {
   document.getElementById('btn-reset-dict').addEventListener('click', safeHandler(resetDict));
   document.getElementById('dict-provider').addEventListener('change', safeHandler(onProviderChange));
 
+  // Settings modal language selectors
+  document.getElementById('settings-book-lang')?.addEventListener('change', async (e) => {
+    state.currentLanguage = e.target.value;
+    localStorage.setItem('hilight-lang', state.currentLanguage);
+    // Sync header selector
+    document.getElementById('lang-select').value = state.currentLanguage;
+    // Re-highlight if book is open
+    if (getIframeDocument()) {
+      await setLanguage(state.currentLanguage);
+      await updateStats();
+    }
+    // Update settings modal context
+    const langName = LANGUAGES.find(l => l.code === state.currentLanguage)?.name || state.currentLanguage;
+    document.getElementById('settings-lang-name').textContent = langName;
+  });
+  document.getElementById('settings-def-lang')?.addEventListener('change', (e) => {
+    state.defLanguage = e.target.value;
+    localStorage.setItem('hilight-def-lang', state.defLanguage);
+    // Sync header selector
+    document.getElementById('def-lang-select').value = state.defLanguage;
+  });
+
   // Open book (from reader toolbar)
   document.getElementById('btn-open-book').addEventListener('click', () => {
     document.getElementById('file-input').click();
@@ -879,6 +921,12 @@ function openSettings() {
   const modal = document.getElementById('settings-modal');
   const langName = LANGUAGES.find(l => l.code === state.currentLanguage)?.name || state.currentLanguage;
   document.getElementById('settings-lang-name').textContent = langName;
+
+  // Sync language selectors with current state
+  const bookLangSelect = document.getElementById('settings-book-lang');
+  const defLangSelect = document.getElementById('settings-def-lang');
+  if (bookLangSelect) bookLangSelect.value = state.currentLanguage;
+  if (defLangSelect) defLangSelect.value = state.defLanguage;
 
   // Set the dropdown to the currently active provider
   const settings = loadDictSettings();

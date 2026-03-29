@@ -239,6 +239,13 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
   // Desktop only: click cycles state, dblclick shows definition.
   // On touch devices the browser fires a synthetic click after touchend —
   // skip it by checking hadTouchRecently.
+  //
+  // Double-click detection: we delay the single-click action by a short
+  // window so that if a dblclick follows, we show the definition instead
+  // of cycling the word level. This prevents the "click fires, then
+  // dblclick fires but word already cycled" race condition.
+  let clickTimer = null;
+
   eventScope.on('click', (e) => {
     if (hadTouchRecently) {
       hadTouchRecently = false;
@@ -254,27 +261,40 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
 
     const now = Date.now();
     if (now - lastActionTime < DEBOUNCE_MS) return;
-    lastActionTime = now;
-    state.lastInteractedWord = span;
-    handleWordTap(span, onStatsUpdate);
-    // Refocus parent window so keyboard shortcuts (arrows, Tab, etc.)
-    // continue to work after clicking a word inside the iframe.
-    window.focus();
+
+    // Delay single-click to allow dblclick to cancel it
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      lastActionTime = Date.now();
+      state.lastInteractedWord = span;
+      handleWordTap(span, onStatsUpdate);
+      window.focus();
+    }, 250);
   });
 
   eventScope.on('dblclick', (e) => {
+    // Cancel the pending single-click action
+    clearTimeout(clickTimer);
+    clickTimer = null;
     if (isPopupActive()) return;
     const span = findWordSpan(e.target);
     if (!span) return;
+    lastActionTime = Date.now();
+    state.lastInteractedWord = span;
     showWordDefinition(span);
   });
 
   // Desktop long-press: mousedown starts timer, mouseup/mousemove cancels.
   // Mirrors the touchstart/touchend long-press behavior for mouse users.
+  let mouseStartX = 0, mouseStartY = 0;
+
   eventScope.on('mousedown', (e) => {
     if (e.button !== 0) return; // left button only
     if (isPopupActive()) return;
     mouseLongPressFired = false;
+    mouseStartX = e.clientX;
+    mouseStartY = e.clientY;
     const span = findWordSpan(e.target);
     if (!span) return;
     mouseDownTimer = setTimeout(() => {
@@ -284,10 +304,15 @@ function setupWordTapHandler(eventScope, onStatsUpdate) {
     }, LONG_PRESS_MS);
   });
 
-  eventScope.on('mousemove', () => {
+  eventScope.on('mousemove', (e) => {
     if (mouseDownTimer) {
-      clearTimeout(mouseDownTimer);
-      mouseDownTimer = null;
+      // Only cancel if moved more than 10px (allows trackpad drift)
+      const dx = Math.abs(e.clientX - mouseStartX);
+      const dy = Math.abs(e.clientY - mouseStartY);
+      if (dx > 10 || dy > 10) {
+        clearTimeout(mouseDownTimer);
+        mouseDownTimer = null;
+      }
     }
   });
 

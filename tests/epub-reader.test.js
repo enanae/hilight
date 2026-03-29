@@ -905,7 +905,10 @@ describe('loadEpub', () => {
     span.dataset.level = '0';
 
     clickHandler({ target: span });
-    expect(handleWordTap).toHaveBeenCalledWith(span, onStats);
+    // Click is delayed 250ms to allow dblclick detection
+    await vi.waitFor(() => {
+      expect(handleWordTap).toHaveBeenCalledWith(span, onStats);
+    });
   });
 
   it('click handler is suppressed when isPopupActive returns true', async () => {
