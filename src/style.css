@@ -21,6 +21,7 @@
   --partial-bg: rgba(96, 165, 250, 0.15);
   --known: #34d399;
   --known-bg: rgba(52, 211, 153, 0.12);
+  --danger: #dc2626;
   --radius: 8px;
 }
 
@@ -135,7 +136,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-raised);
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
   font-size: 16px;
   display: flex;
@@ -148,6 +149,23 @@ html, body {
   background: var(--accent-dim);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* === Focus-visible for keyboard navigation === */
+.toolbar-btn:focus-visible,
+.icon-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.panel-close:focus-visible,
+.toc-list li a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.header-label select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
 }
 
 /* === Stats Bar === */
@@ -344,8 +362,8 @@ html, body {
 }
 
 .btn-close-book:hover {
-  border-color: #dc2626;
-  color: #dc2626;
+  border-color: var(--danger);
+  color: var(--danger);
   background: rgba(220, 38, 38, 0.1);
 }
 
@@ -379,19 +397,23 @@ html, body {
   border-right: 1px solid var(--border);
   box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   z-index: 100;
-  display: none;
+  display: flex;
   flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  pointer-events: none;
 }
 
 .toc-panel.open {
-  display: flex;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .toc-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
 }
@@ -576,19 +598,23 @@ html, body {
   border-left: 1px solid var(--border);
   box-shadow: -4px 0 24px rgba(0,0,0,0.4);
   z-index: 100;
-  display: none;
+  display: flex;
   flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  pointer-events: none;
 }
 
 .vocab-panel.open {
-  display: flex;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .vocab-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
   flex-shrink: 0;
