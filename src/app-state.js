@@ -43,6 +43,19 @@ export const state = {
   // Popup — highlighter.js
   popupActive: false,
 
+  // Reference pane — side-by-side reading
+  reference: {
+    book: null,           // epubjs Book instance (null for PDF)
+    rendition: null,      // epubjs Rendition instance (null for PDF)
+    fileType: null,       // 'epub' | 'pdf' | null
+    fileName: null,       // display name
+    pdfUrl: null,         // blob URL for PDF iframe (revoked on destroy)
+    eventScope: null,     // managed event listeners
+    scrollCleanup: null,  // scroll listener disposer
+  },
+  refPaneOpen: false,
+  refSplitRatio: parseFloat(typeof localStorage !== 'undefined' ? localStorage.getItem('hilight-ref-split') || '0.5' : '0.5'),
+
   // Vocab panel — vocab-browser.js
   vocab: {
     panelEl: null,
@@ -82,6 +95,12 @@ export function resetState() {
   state.reviewResumeDirection = null;
   state.lastInteractedWord = null;
   state.popupActive = false;
+  Object.assign(state.reference, {
+    book: null, rendition: null, fileType: null, fileName: null,
+    pdfUrl: null, eventScope: null, scrollCleanup: null,
+  });
+  state.refPaneOpen = false;
+  state.refSplitRatio = 0.5;
   Object.assign(state.vocab, {
     panelEl: null,
     displayWords: [],

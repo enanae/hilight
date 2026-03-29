@@ -386,6 +386,111 @@ html, body {
   background: var(--surface-raised);
 }
 
+/* === Split Layout (Reference Pane) === */
+.reader-content-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.main-reader-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 250px;
+  min-height: 0;
+}
+
+.ref-drag-handle {
+  display: none;
+  width: 6px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.ref-drag-handle:hover,
+.ref-drag-handle.dragging {
+  background: var(--accent);
+}
+
+.ref-pane {
+  display: none;
+  flex-direction: column;
+  min-width: 200px;
+  min-height: 0;
+  background: var(--surface-raised);
+}
+
+.reader-content-area.ref-open .ref-drag-handle {
+  display: block;
+}
+
+.reader-content-area.ref-open .ref-pane {
+  display: flex;
+}
+
+.ref-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ref-file-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-viewer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.ref-drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.8;
+  transition: background 0.2s;
+}
+
+.ref-drop-zone:hover,
+.ref-drop-zone.drag-over {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Prevent iframes from eating pointer events during resize */
+body.ref-resizing iframe {
+  pointer-events: none;
+}
+
+/* Focus mode: hide reference */
+#app.focus-mode .ref-drag-handle,
+#app.focus-mode .ref-pane {
+  display: none !important;
+}
+#app.focus-mode .main-reader-pane {
+  flex: 1 !important;
+}
+
 /* === TOC Panel === */
 .toc-panel {
   position: absolute;
@@ -1351,8 +1456,14 @@ html, body {
 
   /* Hide low-frequency actions on mobile toolbar */
   .book-title,
-  #btn-open-book {
+  #btn-open-book,
+  #btn-ref {
     display: none;
+  }
+
+  /* Hide reference pane on mobile */
+  .ref-drag-handle, .ref-pane {
+    display: none !important;
   }
 
   /* Undo toast: avoid overlap with phone gesture bars */

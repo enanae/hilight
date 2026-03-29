@@ -7,6 +7,7 @@ import { togglePanel as toggleVocabPanel, closePanel as closeVocabPanel, resetBo
 import { state } from './app-state.js';
 import { isReviewMode, enterReviewMode, exitReviewMode, focusNextWord, focusPrevWord, focusWordAbove, focusWordBelow, getFocusedWord, toggleFilter, isShowingAll } from './review-mode.js';
 import { escapeHtml, showUndoToast, showError } from './ui-utils.js';
+import { loadReference, destroyReference, isReferenceLoaded } from './reference-reader.js';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -105,22 +106,41 @@ function renderApp() {
           <span id="book-title" class="book-title"></span>
           <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label">Vocab</span></button>
           <button id="btn-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label">Help</span></button>
+          <button id="btn-ref" class="toolbar-btn" title="Side-by-side reference pane (R)">&#128196;<span class="btn-label">Reference</span></button>
           <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label">Open</span></button>
           <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label">Focus</span></button>
           <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#8617;<span class="btn-label">Close book</span></button>
         </div>
-        <div id="epub-viewer" class="epub-viewer"></div>
-        <div id="review-bar" class="review-bar">
-          <span class="review-bar-label">REVIEW</span>
-          <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
-          <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
-          <span class="review-bar-keys"><kbd>d</kbd> define</span>
-          <span class="review-bar-keys"><kbd>Space</kbd> next</span>
-          <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
-          <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
-        </div>
-        <div id="reading-hint" class="reading-hint">
-          <kbd>Tab</kbd> review words &middot; <kbd>f</kbd> focus &middot; <kbd>?</kbd> shortcuts
+        <div id="reader-content-area" class="reader-content-area">
+          <div class="main-reader-pane">
+            <div id="epub-viewer" class="epub-viewer"></div>
+            <div id="review-bar" class="review-bar">
+              <span class="review-bar-label">REVIEW</span>
+              <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
+              <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
+              <span class="review-bar-keys"><kbd>d</kbd> define</span>
+              <span class="review-bar-keys"><kbd>Space</kbd> next</span>
+              <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
+              <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
+            </div>
+            <div id="reading-hint" class="reading-hint">
+              <kbd>Tab</kbd> review words &middot; <kbd>f</kbd> focus &middot; <kbd>?</kbd> shortcuts
+            </div>
+          </div>
+          <div id="ref-drag-handle" class="ref-drag-handle"></div>
+          <div id="ref-pane" class="ref-pane">
+            <div class="ref-toolbar">
+              <span id="ref-file-name" class="ref-file-name">No file open</span>
+              <button id="btn-ref-open" class="toolbar-btn" title="Open reference file">&#128214; Open</button>
+              <button id="btn-ref-close" class="toolbar-btn btn-close-book" title="Close reference">&#10005;</button>
+            </div>
+            <div id="ref-viewer" class="ref-viewer">
+              <div id="ref-drop-zone" class="ref-drop-zone">
+                Drop an EPUB or PDF here<br>or click Open above
+              </div>
+            </div>
+            <input type="file" id="ref-file-input" accept=".epub,.pdf,application/epub+zip,application/pdf" hidden />
+          </div>
         </div>
       </div>
 
@@ -222,6 +242,7 @@ function renderApp() {
                   <dt>K</dt><dd>Mark page as known</dd>
                   <dt>V</dt><dd>Vocabulary panel</dd>
                   <dt>F</dt><dd>Focus mode</dd>
+                  <dt>R</dt><dd>Reference pane</dd>
                   <dt>W</dt><dd>Close book</dd>
                   <dt>?</dt><dd>This help</dd>
                 </dl>
@@ -235,6 +256,117 @@ function renderApp() {
 
     <input type="file" id="import-input" accept=".json" hidden />
   `;
+}
+
+// --- Reference pane functions (before bindEvents for hoisting safety) ---
+
+function toggleRefPane() {
+  const contentArea = document.getElementById('reader-content-area');
+  if (!contentArea) return;
+  state.refPaneOpen = !state.refPaneOpen;
+  contentArea.classList.toggle('ref-open', state.refPaneOpen);
+  if (state.refPaneOpen) applyRefSplitRatio();
+  // Reflow main epub to fit the new pane width after layout settles
+  requestAnimationFrame(() => {
+    if (state.currentRendition) state.currentRendition.resize();
+  });
+}
+
+function closeReference() {
+  try { destroyReference(); } catch (err) { console.error('[hilight] destroyReference failed:', err); }
+  state.refPaneOpen = false;
+  const contentArea = document.getElementById('reader-content-area');
+  if (contentArea) contentArea.classList.remove('ref-open');
+  const mainPane = document.querySelector('.main-reader-pane');
+  const refPane = document.getElementById('ref-pane');
+  if (mainPane) mainPane.style.flex = '';
+  if (refPane) refPane.style.flex = '';
+  const viewer = document.getElementById('ref-viewer');
+  if (viewer) {
+    viewer.innerHTML = '<div id="ref-drop-zone" class="ref-drop-zone">Drop an EPUB or PDF here<br>or click Open above</div>';
+    const dz = document.getElementById('ref-drop-zone');
+    dz.addEventListener('click', () => document.getElementById('ref-file-input').click());
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', safeHandler(async (e) => {
+      e.preventDefault();
+      dz.classList.remove('drag-over');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) await openReferenceFile(file);
+    }));
+  }
+  document.getElementById('ref-file-name').textContent = 'No file open';
+  // Reflow main epub back to full width
+  requestAnimationFrame(() => {
+    if (state.currentRendition) state.currentRendition.resize();
+  });
+}
+
+async function openReferenceFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext !== 'epub' && ext !== 'pdf') {
+    showError('Reference pane supports EPUB and PDF files only.');
+    return;
+  }
+  if (!state.refPaneOpen) toggleRefPane();
+  const viewer = document.getElementById('ref-viewer');
+  viewer.innerHTML = '';
+  document.getElementById('ref-file-name').textContent = file.name;
+  try {
+    await loadReference(file, viewer);
+  } catch (err) {
+    console.error('[hilight] loadReference failed:', err);
+    showError('Failed to load reference file.');
+  }
+}
+
+function applyRefSplitRatio() {
+  const mainPane = document.querySelector('.main-reader-pane');
+  const refPane = document.getElementById('ref-pane');
+  if (!mainPane || !refPane) return;
+  const ratio = state.refSplitRatio;
+  mainPane.style.flex = `0 0 ${ratio * 100}%`;
+  refPane.style.flex = `0 0 ${(1 - ratio) * 100}%`;
+}
+
+function setupRefDragHandle() {
+  const handle = document.getElementById('ref-drag-handle');
+  const contentArea = document.getElementById('reader-content-area');
+  const mainPane = document.querySelector('.main-reader-pane');
+  const refPane = document.getElementById('ref-pane');
+  if (!handle || !contentArea || !mainPane || !refPane) return;
+
+  let startX, startMainWidth;
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    document.body.classList.add('ref-resizing');
+    startX = e.clientX;
+    startMainWidth = mainPane.getBoundingClientRect().width;
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!handle.hasPointerCapture(e.pointerId)) return;
+    const totalWidth = contentArea.getBoundingClientRect().width - handle.offsetWidth;
+    const newMainWidth = Math.max(250, Math.min(totalWidth - 200, startMainWidth + (e.clientX - startX)));
+    const ratio = newMainWidth / totalWidth;
+    mainPane.style.flex = `0 0 ${ratio * 100}%`;
+    refPane.style.flex = `0 0 ${(1 - ratio) * 100}%`;
+  });
+
+  handle.addEventListener('pointerup', () => {
+    handle.classList.remove('dragging');
+    document.body.classList.remove('ref-resizing');
+    const totalWidth = contentArea.getBoundingClientRect().width - handle.offsetWidth;
+    const ratio = mainPane.getBoundingClientRect().width / totalWidth;
+    state.refSplitRatio = ratio;
+    localStorage.setItem('hilight-ref-split', ratio.toFixed(3));
+    // Reflow epub content to fit the new pane width
+    if (state.currentRendition) state.currentRendition.resize();
+    if (state.reference.rendition) state.reference.rendition.resize();
+  });
 }
 
 function bindEvents() {
@@ -427,6 +559,10 @@ function bindEvents() {
       case 'F':
         if (!e.ctrlKey && !e.metaKey) toggleFocusMode();
         break;
+      case 'r':
+      case 'R':
+        if (!e.ctrlKey && !e.metaKey) toggleRefPane();
+        break;
       default:
         // All other shortcuts are blocked when a panel is open
         if (tocOpen || vocabOpen) return;
@@ -499,6 +635,43 @@ function bindEvents() {
   document.getElementById('btn-open-book').addEventListener('click', () => {
     document.getElementById('file-input').click();
   });
+
+  // --- Reference pane ---
+  document.getElementById('btn-ref').addEventListener('click', safeHandler(() => toggleRefPane()));
+  document.getElementById('btn-ref-open').addEventListener('click', () => {
+    document.getElementById('ref-file-input').click();
+  });
+  document.getElementById('btn-ref-close').addEventListener('click', safeHandler(() => closeReference()));
+  document.getElementById('ref-file-input').addEventListener('change', safeHandler(async () => {
+    const fi = document.getElementById('ref-file-input');
+    const file = fi.files[0];
+    if (file) await openReferenceFile(file);
+    fi.value = '';
+  }));
+
+  // Reference drop zone
+  const refDropZone = document.getElementById('ref-drop-zone');
+  if (refDropZone) {
+    refDropZone.addEventListener('click', () => {
+      document.getElementById('ref-file-input').click();
+    });
+    refDropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      refDropZone.classList.add('drag-over');
+    });
+    refDropZone.addEventListener('dragleave', () => {
+      refDropZone.classList.remove('drag-over');
+    });
+    refDropZone.addEventListener('drop', safeHandler(async (e) => {
+      e.preventDefault();
+      refDropZone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) await openReferenceFile(file);
+    }));
+  }
+
+  // Drag handle for resizing
+  setupRefDragHandle();
 
   // Help modal — accessible from toolbar, focus bar, and keyboard (?)
   document.getElementById('btn-help').addEventListener('click', safeHandler(toggleHelp));
@@ -596,6 +769,7 @@ function renderTocItems(items, depth) {
 function closeBook() {
   state.currentBookId = null;
   // Cleanup may throw (e.g. partial init) — catch each so UI reset ALWAYS runs
+  try { closeReference(); } catch (err) { console.error('[hilight] closeReference failed:', err); }
   try { exitReviewMode(); hideReviewBar(); hideReadingHint(); } catch (_) { /* ignore */ }
   try { destroyEpub(); } catch (err) { console.error('[hilight] destroyEpub failed:', err); }
   try { closeVocabPanel(); } catch (err) { console.error('[hilight] closeVocabPanel failed:', err); }
@@ -608,6 +782,7 @@ function closeBook() {
   document.getElementById('toc-panel').classList.remove('open');
   document.getElementById('toc-list').innerHTML = '';
 }
+
 
 function toggleToc() {
   closeVocabPanel();
