@@ -369,29 +369,24 @@ describe('Keyboard Shortcuts', () => {
   });
 });
 
-// ── Subdomain: Reading Hint ─────────────────────────────────────────────
+// ── Subdomain: Bottom Bar ───────────────────────────────────────────────
 
-describe('Reading Hint', () => {
-  it('reading-hint element exists in the DOM', () => {
-    expect(document.getElementById('reading-hint')).not.toBeNull();
+describe('Bottom Bar', () => {
+  it('bottom-bar element exists in the DOM', () => {
+    expect(document.getElementById('bottom-bar')).not.toBeNull();
   });
 
-  it('is hidden by default (no visible class)', () => {
-    const hint = document.getElementById('reading-hint');
-    expect(hint.classList.contains('visible')).toBe(false);
+  it('contains stats, reading hints, and review hints', () => {
+    expect(document.getElementById('bar-stat-unknown')).not.toBeNull();
+    expect(document.getElementById('bottom-bar-reading')).not.toBeNull();
+    expect(document.getElementById('bottom-bar-review')).not.toBeNull();
   });
 
-  it('review-bar hides reading hint when it becomes visible', () => {
-    const hint = document.getElementById('reading-hint');
-    const bar = document.getElementById('review-bar');
-    // Simulate reading hint visible
-    hint.classList.add('visible');
-    // Entering review mode shows review bar, which should hide reading hint
-    bar.classList.add('visible');
-    // The actual hiding is done by showReviewBar() in main.js — here we just
-    // verify the elements exist and can be toggled. Integration is tested manually.
-    expect(hint).toBeTruthy();
-    expect(bar).toBeTruthy();
+  it('review section is hidden by default, reading hints visible', () => {
+    const reading = document.getElementById('bottom-bar-reading');
+    const review = document.getElementById('bottom-bar-review');
+    expect(reading.style.display).not.toBe('none');
+    expect(review.style.display).toBe('none');
   });
 });
 

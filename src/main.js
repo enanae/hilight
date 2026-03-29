@@ -67,11 +67,11 @@ function renderApp() {
       </div>
     </header>
 
-    <div class="stats-bar hidden" id="stats-bar">
-      <span id="stat-unknown" class="stat stat-unknown" title="Unknown words on this page">? 0 <span class="stat-label">unknown</span></span>
-      <span id="stat-partial" class="stat stat-partial" title="Learning words on this page">~ 0 <span class="stat-label">learning</span></span>
-      <span id="stat-known" class="stat stat-known" title="Known words on this page">&#10003; 0 <span class="stat-label">known</span></span>
-      <span id="stat-saved" class="stat stat-saved" title="Total words saved across all pages">&#128218; 0 saved</span>
+    <div class="stats-bar hidden" id="stats-bar" style="display:none !important">
+      <span id="stat-unknown" class="stat stat-unknown">? 0 <span class="stat-label">unknown</span></span>
+      <span id="stat-partial" class="stat stat-partial">~ 0 <span class="stat-label">learning</span></span>
+      <span id="stat-known" class="stat stat-known">&#10003; 0 <span class="stat-label">known</span></span>
+      <span id="stat-saved" class="stat stat-saved">&#128218; 0 saved</span>
     </div>
 
     <main class="main-area">
@@ -114,17 +114,24 @@ function renderApp() {
         <div id="reader-content-area" class="reader-content-area">
           <div class="main-reader-pane">
             <div id="epub-viewer" class="epub-viewer"></div>
-            <div id="review-bar" class="review-bar">
-              <span class="review-bar-label">REVIEW</span>
-              <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
-              <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
-              <span class="review-bar-keys"><kbd>d</kbd> define</span>
-              <span class="review-bar-keys"><kbd>Space</kbd> next</span>
-              <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
-              <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
-            </div>
-            <div id="reading-hint" class="reading-hint">
-              <kbd>Tab</kbd> review words &middot; <kbd>f</kbd> focus &middot; <kbd>?</kbd> shortcuts
+            <div id="bottom-bar" class="bottom-bar">
+              <div class="bottom-bar-stats">
+                <span id="bar-stat-unknown" class="stat stat-unknown">? 0</span>
+                <span id="bar-stat-partial" class="stat stat-partial">~ 0</span>
+                <span id="bar-stat-known" class="stat stat-known">&#10003; 0</span>
+              </div>
+              <div id="bottom-bar-reading" class="bottom-bar-hints">
+                <kbd>Tab</kbd> review &middot; <kbd>k</kbd> mark known &middot; <kbd>?</kbd> help
+              </div>
+              <div id="bottom-bar-review" class="bottom-bar-review" style="display:none">
+                <span class="review-bar-label">REVIEW</span>
+                <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
+                <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
+                <span class="review-bar-keys"><kbd>d</kbd> define</span>
+                <span class="review-bar-keys"><kbd>Space</kbd> next</span>
+                <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
+                <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
+              </div>
             </div>
           </div>
           <div id="ref-drag-handle" class="ref-drag-handle"></div>
@@ -815,6 +822,13 @@ async function updateStats() {
   document.getElementById('stat-unknown').innerHTML = `? ${unknownOnPage} <span class="stat-label">unknown</span>`;
   document.getElementById('stat-partial').innerHTML = `~ ${partialOnPage} <span class="stat-label">learning</span>`;
   document.getElementById('stat-known').innerHTML = `\u2713 ${knownOnPage} <span class="stat-label">known</span>`;
+  // Update bottom bar stats too
+  const barUnknown = document.getElementById('bar-stat-unknown');
+  const barPartial = document.getElementById('bar-stat-partial');
+  const barKnown = document.getElementById('bar-stat-known');
+  if (barUnknown) barUnknown.textContent = `? ${unknownOnPage}`;
+  if (barPartial) barPartial.textContent = `~ ${partialOnPage}`;
+  if (barKnown) barKnown.textContent = `\u2713 ${knownOnPage}`;
   // DB total: how many words the user has saved across all pages
   const stats = await getStats(state.currentLanguage);
   document.getElementById('stat-saved').textContent = `\uD83D\uDCDA ${stats.total} saved`;
@@ -924,26 +938,27 @@ function showDefForFocused() {
 }
 
 function showReviewBar() {
-  const bar = document.getElementById('review-bar');
-  if (bar) bar.classList.add('visible');
-  hideReadingHint();
+  const reading = document.getElementById('bottom-bar-reading');
+  const review = document.getElementById('bottom-bar-review');
+  if (reading) reading.style.display = 'none';
+  if (review) review.style.display = '';
   updateReviewBarFilter();
 }
 
 function hideReviewBar() {
-  const bar = document.getElementById('review-bar');
-  if (bar) bar.classList.remove('visible');
-  showReadingHint();
+  const reading = document.getElementById('bottom-bar-reading');
+  const review = document.getElementById('bottom-bar-review');
+  if (reading) reading.style.display = '';
+  if (review) review.style.display = 'none';
 }
 
 function showReadingHint() {
-  const hint = document.getElementById('reading-hint');
-  if (hint) hint.classList.add('visible');
+  const bar = document.getElementById('bottom-bar');
+  if (bar) bar.classList.add('visible');
 }
 
 function hideReadingHint() {
-  const hint = document.getElementById('reading-hint');
-  if (hint) hint.classList.remove('visible');
+  // Bottom bar stays visible — it shows stats. Only called during cleanup.
 }
 
 function updateReviewBarFilter() {

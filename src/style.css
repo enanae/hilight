@@ -315,6 +315,14 @@ html, body {
   color: #c084fc;
 }
 
+/* Hide header and stats bar when reading — progressive disclosure.
+   Session-setup controls (language, export/import) aren't needed while reading.
+   Uses :has() to only hide when a book is actually open. */
+#app:has(.reader-area.open) .app-header,
+#app:has(.reader-area.open) .stats-bar {
+  display: none;
+}
+
 /* === Reader === */
 .reader-area {
   display: none;
@@ -1040,68 +1048,41 @@ body.ref-resizing iframe {
   color: var(--known);
 }
 
-/* === Reading Hint === */
-.reading-hint {
-  display: flex;
-  justify-content: center;
+/* === Combined Bottom Bar (stats + hints/review) === */
+.bottom-bar {
+  display: none;
   align-items: center;
-  gap: 6px;
-  padding: 0 20px;
-  max-height: 0;
-  overflow: hidden;
+  gap: 12px;
+  padding: 6px 20px;
   background: var(--surface);
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: max-height 0.2s ease, padding 0.2s ease;
 }
 
-.reading-hint.visible {
-  max-height: 40px;
-  padding: 8px 20px;
-}
-
-.reading-hint kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  background: var(--surface-raised);
-  border-radius: 3px;
-  border: 1px solid var(--border);
-  font-family: inherit;
-  font-size: 11px;
-}
-
-/* === Review Bar === */
-.review-bar {
+.bottom-bar.visible {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 20px;
-  max-height: 0;
-  overflow: hidden;
-  background: var(--surface);
-  border-top: 1px solid var(--accent);
-  font-size: 12px;
-  color: var(--text-muted);
+}
+
+.bottom-bar-stats {
+  display: flex;
+  gap: 8px;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  transition: max-height 0.2s ease, padding 0.2s ease;
 }
 
-.review-bar.visible {
-  max-height: 50px;
-  padding: 8px 20px;
-}
-
-.review-bar-label {
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.5px;
+.bottom-bar-stats .stat {
+  padding: 2px 6px;
   font-size: 11px;
 }
 
-.review-bar-keys kbd {
+.bottom-bar-hints {
+  flex: 1;
+  text-align: center;
+}
+
+.bottom-bar-hints kbd,
+.bottom-bar-review kbd {
   display: inline-block;
   padding: 1px 5px;
   background: var(--surface-raised);
@@ -1111,6 +1092,25 @@ body.ref-resizing iframe {
   font-size: 11px;
   font-weight: 600;
   color: var(--text);
+}
+
+.bottom-bar-review {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.review-bar-label {
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  font-size: 11px;
+}
+
+.review-bar-keys {
+  white-space: nowrap;
 }
 
 /* === Help Modal === */
@@ -1348,8 +1348,8 @@ body.ref-resizing iframe {
 #app.focus-mode .app-header,
 #app.focus-mode .stats-bar,
 #app.focus-mode .reader-toolbar,
-#app.focus-mode .reading-hint {
-  display: none;
+#app.focus-mode .bottom-bar {
+  display: none !important;
 }
 
 .focus-bar {
@@ -1437,22 +1437,12 @@ body.ref-resizing iframe {
     justify-content: center;
   }
 
-  /* Reading hint shows keyboard shortcuts — useless on touch devices */
-  .reading-hint {
+  /* Keyboard hints are useless on touch devices — hide hint/review text, keep stats */
+  .bottom-bar-hints,
+  .bottom-bar-review {
     display: none !important;
   }
 
-  /* Review bar shows keyboard shortcuts — useless on touch devices */
-  .review-bar {
-    display: none !important;
-  }
-
-  /* On mobile, hide header + stats when reading — the toolbar has everything needed.
-     Prevents the "wall of chrome" when exiting focus mode. */
-  #app:has(.reader-area.open) .app-header,
-  #app:has(.reader-area.open) .stats-bar {
-    display: none;
-  }
 
   /* Hide low-frequency actions on mobile toolbar */
   .book-title,
@@ -1483,12 +1473,6 @@ body.ref-resizing iframe {
   .help-keyboard,
   .help-hint {
     display: none;
-  }
-
-  .review-bar {
-    gap: 8px;
-    padding: 4px 10px;
-    font-size: 11px;
   }
 
   .focus-bar {
