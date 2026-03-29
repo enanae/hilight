@@ -707,6 +707,16 @@ function injectStyles(doc) {
       font-size: ${fontSize}px !important;
       line-height: 1.6 !important;
     }
+    /* Override epub font-size on all elements — some EPUBs use rem/em
+       values that compound with their own html font-size setting. */
+    #hilight-dark-theme p,
+    #hilight-dark-theme li,
+    #hilight-dark-theme td,
+    #hilight-dark-theme th,
+    #hilight-dark-theme blockquote,
+    #hilight-dark-theme span:not(.hl-word) {
+      font-size: inherit !important;
+    }
     #hilight-dark-theme a,
     #hilight-dark-theme a:link,
     #hilight-dark-theme a:visited,

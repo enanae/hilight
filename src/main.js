@@ -313,7 +313,15 @@ function toggleRefPane() {
   if (!contentArea) return;
   state.refPaneOpen = !state.refPaneOpen;
   contentArea.classList.toggle('ref-open', state.refPaneOpen);
-  if (state.refPaneOpen) applyRefSplitRatio();
+  if (state.refPaneOpen) {
+    applyRefSplitRatio();
+  } else {
+    // Reset inline flex styles so main pane returns to full width
+    const mainPane = document.querySelector('.main-reader-pane');
+    const refPane = document.getElementById('ref-pane');
+    if (mainPane) mainPane.style.flex = '';
+    if (refPane) refPane.style.flex = '';
+  }
   // Reflow main epub to fit the new pane width after layout settles
   requestAnimationFrame(() => {
     if (state.currentRendition) state.currentRendition.resize();
