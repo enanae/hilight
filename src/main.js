@@ -102,14 +102,26 @@ function renderApp() {
           <button id="btn-focus-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label">Help</span></button>
         </div>
         <div class="reader-toolbar">
-          <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label">Contents</span></button>
-          <span id="book-title" class="book-title"></span>
-          <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label">Vocab</span></button>
-          <button id="btn-help" class="toolbar-btn" title="Help (?)">?<span class="btn-label">Help</span></button>
-          <button id="btn-ref" class="toolbar-btn" title="Side-by-side reference pane (R)">&#128196;<span class="btn-label">Reference</span></button>
-          <button id="btn-open-book" class="toolbar-btn" title="Open a different book">&#128214;<span class="btn-label">Open</span></button>
-          <button id="btn-focus" class="toolbar-btn" title="Focus mode — hide menus (F)">&#9673;<span class="btn-label">Focus</span></button>
-          <button id="btn-close-book" class="toolbar-btn btn-close-book" title="Close this book and return to upload screen (W)">&#8617;<span class="btn-label">Close book</span></button>
+          <div class="toolbar-group toolbar-nav">
+            <button id="btn-toc" class="toolbar-btn" title="Table of contents (T)">&#9776;<span class="btn-label">Contents</span></button>
+            <span id="book-title" class="book-title"></span>
+          </div>
+          <div class="toolbar-group toolbar-actions">
+            <button id="btn-mark-known" class="toolbar-btn" title="Mark all words on this page as known (K)">&#10003;<span class="btn-label">Mark known</span></button>
+            <button id="btn-review" class="toolbar-btn" title="Enter review mode (Tab)">&#9654;<span class="btn-label">Review</span></button>
+            <button id="btn-vocab" class="toolbar-btn" title="Browse and manage your vocabulary list (V)">&#128218;<span class="btn-label">Vocab</span></button>
+          </div>
+          <div class="toolbar-group toolbar-overflow-wrap">
+            <button id="btn-overflow" class="toolbar-btn" title="More options" aria-label="More options">&#8943;</button>
+            <div id="overflow-menu" class="overflow-menu">
+              <button id="btn-help" class="overflow-item" title="Keyboard shortcuts (?)">? Help</button>
+              <button id="btn-ref" class="overflow-item" title="Side-by-side reference pane (R)">&#128196; Reference</button>
+              <button id="btn-focus" class="overflow-item" title="Focus mode (F)">&#9673; Focus</button>
+              <button id="btn-overflow-settings" class="overflow-item" title="Language &amp; dictionary settings">&#9881; Settings</button>
+              <button id="btn-open-book" class="overflow-item" title="Open a different book">&#128214; Open book</button>
+              <button id="btn-close-book" class="overflow-item overflow-danger" title="Close book (W)">&#8617; Close book</button>
+            </div>
+          </div>
         </div>
         <div id="reader-content-area" class="reader-content-area">
           <div class="main-reader-pane">
@@ -614,8 +626,11 @@ function bindEvents() {
     }
   }));
 
-  // Focus mode
-  document.getElementById('btn-focus').addEventListener('click', safeHandler(toggleFocusMode));
+  // Focus mode (now in overflow menu)
+  document.getElementById('btn-focus').addEventListener('click', safeHandler(() => {
+    document.getElementById('overflow-menu').classList.remove('open');
+    toggleFocusMode();
+  }));
   document.getElementById('btn-exit-focus').addEventListener('click', safeHandler(exitFocusMode));
   document.getElementById('btn-focus-vocab').addEventListener('click', safeHandler(() => {
     return toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
@@ -626,8 +641,36 @@ function bindEvents() {
     return toggleVocabPanel(state.currentLanguage, { bookId: state.currentBookId, onStatsUpdate: updateStats, getIframeDocument });
   }));
 
+  // Mark known button (surfaces the K shortcut as a visible button)
+  document.getElementById('btn-mark-known').addEventListener('click', safeHandler(doMarkAllKnown));
+
+  // Review button (surfaces the Tab shortcut as a visible button)
+  document.getElementById('btn-review').addEventListener('click', safeHandler(() => {
+    const iframeDoc = getIframeDocument();
+    if (iframeDoc) {
+      enterReviewMode(iframeDoc);
+      showReviewBar();
+    }
+  }));
+
+  // Overflow menu toggle
+  document.getElementById('btn-overflow').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('overflow-menu').classList.toggle('open');
+  });
+  // Close overflow menu when clicking outside
+  document.addEventListener('click', () => {
+    document.getElementById('overflow-menu')?.classList.remove('open');
+  });
+
   // Close book
   document.getElementById('btn-close-book').addEventListener('click', safeHandler(closeBook));
+
+  // Overflow settings button (opens settings modal)
+  document.getElementById('btn-overflow-settings').addEventListener('click', safeHandler(() => {
+    document.getElementById('overflow-menu').classList.remove('open');
+    openSettings();
+  }));
 
   // Settings modal
   document.getElementById('btn-settings').addEventListener('click', safeHandler(openSettings));
