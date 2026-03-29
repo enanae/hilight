@@ -100,6 +100,12 @@ export async function loadEpub(source, viewerEl, language, options = {}) {
       hideLoadingOverlay(viewerEl);
     }
 
+    // Touch page navigation: invisible tap zones at left/right edges.
+    // These provide page-turn targets for mobile users who can't use
+    // keyboard arrows. The zones are narrow (15%) and only trigger on
+    // quick taps (not drags/scrolls).
+    injectTapZones(doc);
+
     // Auto-skip sections with no highlightable words (cover pages, blank
     // separators, image-only pages). Continues in the current navigation
     // direction, with a cap to avoid infinite loops in all-empty books.
@@ -568,6 +574,59 @@ function setupChapterBanners(container, viewerEl) {
   state.scrollCleanup = addManagedScrollListener(container, onScroll);
   // Check initial position (e.g. short chapters that fit in one viewport)
   onScroll();
+}
+
+/**
+ * Add invisible tap zones at left/right edges for touch page navigation.
+ * Zones cover 15% of the viewport width and the full height.
+ * Only fires on quick taps (< 300ms, < 10px movement) to avoid
+ * interfering with scrolling or word taps.
+ */
+function injectTapZones(doc) {
+  // Don't duplicate on re-render
+  if (doc.querySelector('.hl-tap-zone')) return;
+
+  const createZone = (side) => {
+    const zone = doc.createElement('div');
+    zone.className = `hl-tap-zone hl-tap-${side}`;
+    zone.style.cssText = `
+      position: fixed; top: 0; ${side}: 0;
+      width: 15%; height: 100%;
+      z-index: 5; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    `;
+
+    let touchStart = null;
+    zone.addEventListener('touchstart', (e) => {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
+    }, { passive: true });
+
+    zone.addEventListener('touchend', (e) => {
+      if (!touchStart) return;
+      const dt = Date.now() - touchStart.time;
+      const dx = Math.abs(e.changedTouches[0].clientX - touchStart.x);
+      const dy = Math.abs(e.changedTouches[0].clientY - touchStart.y);
+      touchStart = null;
+      if (dt < 300 && dx < 10 && dy < 10) {
+        e.preventDefault();
+        if (side === 'right') nextPage();
+        else prevPage();
+      }
+    });
+
+    // Desktop: simple click
+    zone.addEventListener('click', (e) => {
+      // Only trigger if not a word span
+      if (e.target.closest('.hl-word')) return;
+      if (side === 'right') nextPage();
+      else prevPage();
+    });
+
+    doc.body.appendChild(zone);
+  };
+
+  createZone('left');
+  createZone('right');
 }
 
 /** Inject highlight CSS into the epub's iframe document. */

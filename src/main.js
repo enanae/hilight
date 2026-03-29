@@ -62,8 +62,6 @@ function renderApp() {
           </select>
         </label>
         <button id="btn-settings" class="icon-btn" title="Dictionary settings" aria-label="Dictionary settings">&#9881;</button>
-        <button id="btn-export" class="icon-btn" title="Export vocabulary as JSON" aria-label="Export vocabulary">&#128190;</button>
-        <button id="btn-import" class="icon-btn" title="Import vocabulary from JSON" aria-label="Import vocabulary">&#128194;</button>
       </div>
     </header>
 
@@ -142,7 +140,7 @@ function renderApp() {
                 <span class="review-bar-keys"><kbd>d</kbd> define</span>
                 <span class="review-bar-keys"><kbd>Space</kbd> next</span>
                 <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
-                <span class="review-bar-keys"><kbd>Esc</kbd> exit</span>
+                <button id="btn-exit-review" class="review-exit-btn" title="Exit review mode">&#10005; Exit</button>
               </div>
             </div>
           </div>
@@ -273,7 +271,6 @@ function renderApp() {
       </div>
     </div>
 
-    <input type="file" id="import-input" accept=".json" hidden />
   `;
 }
 
@@ -653,6 +650,13 @@ function bindEvents() {
     }
   }));
 
+  // Exit review button (tappable alternative to Escape key)
+  document.getElementById('btn-exit-review').addEventListener('click', safeHandler(() => {
+    dismissPopup(getIframeDocument());
+    exitReviewMode();
+    hideReviewBar();
+  }));
+
   // Overflow menu toggle
   document.getElementById('btn-overflow').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -730,12 +734,6 @@ function bindEvents() {
   document.querySelector('#help-modal .modal-backdrop').addEventListener('click', safeHandler(closeHelp));
   document.querySelector('#help-modal .modal-content').addEventListener('click', (e) => e.stopPropagation());
 
-  // Export / Import
-  document.getElementById('btn-export').addEventListener('click', safeHandler(doExport));
-  document.getElementById('btn-import').addEventListener('click', safeHandler(() => {
-    document.getElementById('import-input').click();
-  }));
-  document.getElementById('import-input').addEventListener('change', safeHandler(doImport));
 }
 
 async function openBook(file) {
@@ -981,18 +979,22 @@ function showDefForFocused() {
 }
 
 function showReviewBar() {
+  const bar = document.getElementById('bottom-bar');
   const reading = document.getElementById('bottom-bar-reading');
   const review = document.getElementById('bottom-bar-review');
   if (reading) reading.style.display = 'none';
   if (review) review.style.display = '';
+  if (bar) bar.classList.add('review-active');
   updateReviewBarFilter();
 }
 
 function hideReviewBar() {
+  const bar = document.getElementById('bottom-bar');
   const reading = document.getElementById('bottom-bar-reading');
   const review = document.getElementById('bottom-bar-review');
   if (reading) reading.style.display = '';
   if (review) review.style.display = 'none';
+  if (bar) bar.classList.remove('review-active');
 }
 
 function showReadingHint() {

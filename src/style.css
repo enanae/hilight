@@ -949,6 +949,35 @@ body.ref-resizing iframe {
   cursor: default;
 }
 
+.vocab-io {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.vocab-export-btn,
+.vocab-import-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.vocab-export-btn:hover,
+.vocab-import-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
 /* Empty state */
 .vb-empty {
   padding: 32px 20px;
@@ -1173,6 +1202,28 @@ body.ref-resizing iframe {
 
 .review-bar-keys {
   white-space: nowrap;
+}
+
+.review-exit-btn {
+  padding: 2px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.review-exit-btn:hover {
+  background: var(--accent-dim);
+}
+
+/* Visual indicator when review mode is active */
+.bottom-bar.review-active {
+  border-top-color: var(--accent);
 }
 
 /* === Help Modal === */

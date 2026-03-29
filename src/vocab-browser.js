@@ -76,7 +76,7 @@
  * "In this book" mode: scans the full epub spine and builds a word list
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  */
-import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab } from './vocab-store.js';
+import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab, exportVocab } from './vocab-store.js';
 import { getAllBookWords } from './epub-reader.js';
 import { stem } from './stemmer.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN, markAllKnown, restoreWordLevels } from './highlighter.js';
@@ -169,6 +169,11 @@ function ensurePanel() {
       <button class="vocab-forget-btn" data-scope="book" disabled title="Forget saved words that appear in the current book">Forget in book</button>
       <button class="vocab-forget-btn" data-scope="all" title="Forget all saved words for this language">Forget all</button>
     </div>
+    <div class="vocab-io">
+      <button class="vocab-export-btn" title="Export vocabulary as JSON">&#128190; Export</button>
+      <button class="vocab-import-btn" title="Import vocabulary from JSON">&#128194; Import</button>
+      <input type="file" class="vocab-import-input" accept=".json" hidden />
+    </div>
   `;
 
   state.vocab.panelEl.querySelector('.vocab-close-btn').addEventListener('click', closePanel);
@@ -248,6 +253,38 @@ function ensurePanel() {
     const scope = btn.dataset.scope;
     if (scope === 'all') forgetAllWords();
     if (scope === 'book') forgetBookWords();
+  });
+
+  // Export/Import buttons
+  state.vocab.panelEl.querySelector('.vocab-export-btn').addEventListener('click', async () => {
+    const data = await exportVocab(state.currentLanguage);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hilight-vocab-${state.currentLanguage}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  const importBtn = state.vocab.panelEl.querySelector('.vocab-import-btn');
+  const importInput = state.vocab.panelEl.querySelector('.vocab-import-input');
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await importVocab(data);
+      state.vocab.dbWords = await getAllWords(state.currentLanguage);
+      await rebuildDisplayWords();
+      renderList();
+      if (state.vocab.onStatsUpdate) state.vocab.onStatsUpdate();
+    } catch (err) {
+      console.error('Import failed:', err);
+    }
+    e.target.value = '';
   });
 
   document.querySelector('.main-area').appendChild(state.vocab.panelEl);

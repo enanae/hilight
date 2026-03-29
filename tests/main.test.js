@@ -143,12 +143,11 @@ describe('App Rendering', () => {
     expect(document.getElementById('toc-list')).not.toBeNull();
   });
 
-  it('renders the hidden import input', () => {
-    const importInput = document.getElementById('import-input');
-    expect(importInput).not.toBeNull();
-    expect(importInput.type).toBe('file');
-    expect(importInput.accept).toBe('.json');
-    expect(importInput.hidden).toBe(true);
+  it('renders the overflow menu', () => {
+    const menu = document.getElementById('overflow-menu');
+    expect(menu).not.toBeNull();
+    expect(menu.querySelector('#btn-help')).not.toBeNull();
+    expect(menu.querySelector('#btn-close-book')).not.toBeNull();
   });
 });
 
@@ -665,47 +664,10 @@ describe('Vocab Panel', () => {
 
 // ── Subdomain: Export / Import ──────────────────────────────────────────
 
-describe('Export / Import', () => {
-  it('calls exportVocab and creates a download when btn-export is clicked', async () => {
-    exportVocab.mockResolvedValue([{ word: 'test', level: 1 }]);
-
-    // Mock URL.createObjectURL and revokeObjectURL
-    const mockUrl = 'blob:test-url';
-    const createObjectURL = vi.fn(() => mockUrl);
-    const revokeObjectURL = vi.fn();
-    globalThis.URL.createObjectURL = createObjectURL;
-    globalThis.URL.revokeObjectURL = revokeObjectURL;
-
-    // Mock the click on the dynamically created anchor
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-
-    document.getElementById('btn-export').click();
-
-    await vi.waitFor(() => {
-      expect(exportVocab).toHaveBeenCalled();
-      expect(createObjectURL).toHaveBeenCalled();
-      expect(clickSpy).toHaveBeenCalled();
-      expect(revokeObjectURL).toHaveBeenCalledWith(mockUrl);
-    });
-
-    clickSpy.mockRestore();
-  });
-
-  it('imports vocab data from a JSON file', async () => {
-    const importInput = document.getElementById('import-input');
-    const testData = [{ word: 'bonjour', level: 2 }];
-    const mockFile = new File([JSON.stringify(testData)], 'vocab.json', { type: 'application/json' });
-
-    // Simulate the file selection
-    Object.defineProperty(importInput, 'files', {
-      value: [mockFile],
-      configurable: true,
-    });
-
-    importInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    await vi.waitFor(() => {
-      expect(importVocab).toHaveBeenCalledWith(testData);
-    });
+describe('Export / Import (moved to vocab panel)', () => {
+  it('export/import buttons no longer in header', () => {
+    // Export/import are now in the vocab panel, not the header
+    expect(document.getElementById('btn-export')).toBeNull();
+    expect(document.getElementById('btn-import')).toBeNull();
   });
 });
