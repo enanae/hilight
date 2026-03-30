@@ -553,6 +553,9 @@ export async function findWordContexts(word, max = 5, { signal } = {}) {
 
   const contexts = [];
   const items = state.currentBook.spine.items;
+  // Word boundary regex — matches the word as a whole token, not as a substring.
+  // Uses Unicode word boundary awareness: non-letter chars on either side.
+  const wordRe = new RegExp(`(?<![\\p{L}\\p{N}])${normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu');
 
   for (let i = 0; i < items.length && contexts.length < max; i++) {
     if (signal?.aborted) break;
@@ -566,15 +569,14 @@ export async function findWordContexts(word, max = 5, { signal } = {}) {
         const text = para.textContent?.trim();
         if (!text || text.length < 10) continue;
 
-        // Check if this paragraph contains the word
-        const lowerText = text.toLowerCase();
-        if (!lowerText.includes(normalized)) continue;
+        // Check if this paragraph contains the word as a whole token
+        if (!wordRe.test(text)) continue;
 
         // Extract a sentence containing the word (split on sentence boundaries)
         const sentences = text.split(/(?<=[.!?])\s+/);
         for (const sent of sentences) {
           if (contexts.length >= max) break;
-          if (sent.toLowerCase().includes(normalized)) {
+          if (wordRe.test(sent)) {
             // Avoid duplicates
             const trimmed = sent.trim();
             if (trimmed.length > 10 && !contexts.some(c => c.text === trimmed)) {
