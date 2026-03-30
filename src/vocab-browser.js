@@ -593,15 +593,20 @@ function renderList() {
     words.sort((a, b) => a.word.localeCompare(b.word));
     const isSingle = words.length === 1;
 
+    // Check if this group is lemma-verified or stemmer-fallback
+    const isLemmaVerified = words.some(w => state.vocab.lemmaMap?.has(w.word));
+
     if (isSingle) {
       const w = words[0];
-      html += `<div class="vb-word-row vb-flat-row" data-word="${escapeHtml(w.word)}">
+      const verifiedClass = isLemmaVerified ? '' : ' vb-unverified';
+      html += `<div class="vb-word-row vb-flat-row${verifiedClass}" data-word="${escapeHtml(w.word)}">
         <button class="vb-expand-btn" title="Show details">&#9656;</button>
         <span class="vb-word-text">${escapeHtml(w.word)}</span>
         <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
       </div>`;
     } else {
-      html += `<div class="vb-group" data-stem="${escapeHtml(stemKey)}">
+      const verifiedClass = isLemmaVerified ? '' : ' vb-unverified';
+      html += `<div class="vb-group${verifiedClass}" data-stem="${escapeHtml(stemKey)}">
         <div class="vb-group-header">
           <span class="vb-group-chevron"></span>
           <span class="vb-group-stem">${escapeHtml(stemKey)}</span>
@@ -691,9 +696,26 @@ async function toggleWordDetail(row) {
     } catch { defResult = null; }
   }
 
+  // 2b. If we discovered the lemma and it's not cached, update the cache
+  // and schedule a re-render to move the word to its correct group.
+  let needsRegroup = false;
+  if (defResult && !defResult.error && defResult.stemWord && !state.vocab.lemmaMap?.has(word)) {
+    const resolvedLemma = defResult.stemWord;
+    if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
+    state.vocab.lemmaMap.set(word, resolvedLemma);
+    await putLemmas([{ language: state.currentLanguage, word, lemma: resolvedLemma }]).catch(() => {});
+    needsRegroup = true;
+  } else if (defResult && !defResult.error && !defResult.stemWord && !state.vocab.lemmaMap?.has(word)) {
+    // Word IS a lemma — cache it as itself
+    if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
+    state.vocab.lemmaMap.set(word, word);
+    await putLemmas([{ language: state.currentLanguage, word, lemma: word }]).catch(() => {});
+  }
+
   if (defResult && !defResult.error) {
     // Show lemma relation
-    if (lemma && lemma !== word) {
+    const resolvedLemma = state.vocab.lemmaMap?.get(word);
+    if (resolvedLemma && resolvedLemma !== word) {
       const formOf = defResult.definitions?.[0]?.definition || '';
       html += `<div class="vb-detail-lemma">${escapeHtml(formOf)}</div>`;
     }
@@ -745,6 +767,12 @@ async function toggleWordDetail(row) {
 
   if (!detail.querySelector('.vb-detail-sentences')) {
     detail.innerHTML = html || '<div class="vb-detail-empty">No definition available</div>';
+  }
+
+  // If the lemma resolved to a different group, re-render the list
+  // so the word moves to its correct location.
+  if (needsRegroup) {
+    setTimeout(() => renderList(), 100);
   }
 }
 
