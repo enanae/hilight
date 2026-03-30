@@ -257,14 +257,19 @@ function ensurePanel() {
 
   // Export/Import buttons
   state.vocab.panelEl.querySelector('.vocab-export-btn').addEventListener('click', async () => {
-    const data = await exportVocab(state.currentLanguage);
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `hilight-vocab-${state.currentLanguage}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const data = await exportVocab(state.currentLanguage);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hilight-vocab-${state.currentLanguage}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      showUndoToast('Export failed. Check the console for details.');
+    }
   });
 
   const importBtn = state.vocab.panelEl.querySelector('.vocab-import-btn');
@@ -283,6 +288,7 @@ function ensurePanel() {
       if (state.vocab.onStatsUpdate) state.vocab.onStatsUpdate();
     } catch (err) {
       console.error('Import failed:', err);
+      showUndoToast('Import failed. Make sure the file is valid JSON.');
     }
     e.target.value = '';
   });
@@ -484,12 +490,13 @@ function renderList() {
   if (filtered.length === 0) {
     let msg;
     if (state.vocab.inBookOnly && (!state.vocab.bookWordSet || state.vocab.bookWordSet.size === 0)) {
-      // Scan failed/empty while "In this book" is checked
       msg = 'Book scan could not complete.<br>Uncheck \u201CIn this book\u201D to see all saved words.';
     } else if (state.vocab.displayWords.length === 0) {
       msg = 'No vocabulary saved yet.<br>Tap words while reading to build your list.';
     } else if (state.vocab.activeFilter === 0 && !(state.vocab.bookWordSet && state.vocab.bookWordSet.size > 0)) {
       msg = 'Unknown words are only visible when the<br>book scan completes successfully.';
+    } else if (state.vocab.searchQuery) {
+      msg = `No words matching \u201C${escapeHtml(state.vocab.searchQuery)}\u201D in the current filter.`;
     } else {
       msg = 'No words match the current filters.';
     }

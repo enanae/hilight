@@ -1179,19 +1179,23 @@ body.ref-resizing iframe {
 
 /* === Combined Bottom Bar (stats + hints/review) === */
 .bottom-bar {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 20px;
+  padding: 0 20px;
+  max-height: 0;
+  overflow: hidden;
   background: var(--surface);
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
+  transition: max-height 0.2s ease, padding 0.2s ease;
 }
 
 .bottom-bar.visible {
-  display: flex;
+  max-height: 40px;
+  padding: 6px 20px;
 }
 
 .bottom-bar-stats {
@@ -1500,7 +1504,9 @@ body.ref-resizing iframe {
 #app.focus-mode .stats-bar,
 #app.focus-mode .reader-toolbar,
 #app.focus-mode .bottom-bar {
-  display: none !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  border: none !important;
 }
 
 .focus-bar {

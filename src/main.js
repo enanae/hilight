@@ -417,12 +417,17 @@ function setupRefDragHandle() {
     handle.classList.remove('dragging');
     document.body.classList.remove('ref-resizing');
     const totalWidth = contentArea.getBoundingClientRect().width - handle.offsetWidth;
-    const ratio = mainPane.getBoundingClientRect().width / totalWidth;
+    const ratio = Math.max(0.25, Math.min(0.75, mainPane.getBoundingClientRect().width / totalWidth));
     state.refSplitRatio = ratio;
     localStorage.setItem('hilight-ref-split', ratio.toFixed(3));
     // Reflow epub content to fit the new pane width
     if (state.currentRendition) state.currentRendition.resize();
     if (state.reference.rendition) state.reference.rendition.resize();
+  });
+
+  // Reset split ratio on window resize to prevent layout breaks (e.g. rotation)
+  window.addEventListener('resize', () => {
+    if (state.refPaneOpen) applyRefSplitRatio();
   });
 }
 
