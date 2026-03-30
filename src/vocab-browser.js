@@ -409,13 +409,13 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
   state.vocab.panelEl.classList.add('open');
   renderList();
 
-  // Background-fetch lemmas for words not yet cached.
-  // The panel renders immediately with stemmer groups; as lemmas arrive,
-  // it silently re-renders with improved grouping.
+  // Background-fetch lemmas for SAVED words (level 1+2) not yet cached.
+  // We don't fetch for all 10k+ book words — only words the user has
+  // actually interacted with. This keeps the fetch count manageable
+  // (typically 10-200 words instead of thousands).
   cancelLemmaFetch();
-  const uncached = state.vocab.displayWords
-    .map(w => w.word)
-    .filter(w => !state.vocab.lemmaMap.has(w));
+  const savedWords = state.vocab.dbWords.map(w => w.word);
+  const uncached = savedWords.filter(w => !state.vocab.lemmaMap.has(w));
 
   if (uncached.length > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
     const controller = new AbortController();
