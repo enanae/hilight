@@ -134,11 +134,12 @@ function renderApp() {
                 <span id="bar-stat-known" class="stat stat-known">&#10003; 0</span>
               </div>
               <div id="bottom-bar-reading" class="bottom-bar-hints">
-                <kbd>Tab</kbd> review &middot; <kbd>k</kbd> mark known &middot; <kbd>?</kbd> help
+                <kbd>Tab</kbd> review &middot; <kbd>k</kbd> mark known &middot; <kbd>r</kbd> reference &middot; <kbd>?</kbd> help
               </div>
               <div id="bottom-bar-review" class="bottom-bar-review" style="display:none">
                 <span class="review-bar-label">REVIEW</span>
-                <span class="review-bar-keys"><kbd>n</kbd>/<kbd>N</kbd> navigate</span>
+                <span class="review-bar-keys"><kbd>&#8592;</kbd><kbd>&#8594;</kbd> word</span>
+                <span class="review-bar-keys"><kbd>&#8593;</kbd><kbd>&#8595;</kbd> line</span>
                 <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
                 <span class="review-bar-keys"><kbd>d</kbd> define</span>
                 <span class="review-bar-keys"><kbd>Space</kbd> next</span>
@@ -478,6 +479,13 @@ function bindEvents() {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
+    // --- Overflow menu open? Escape closes it, other keys ignored ---
+    if (document.getElementById('overflow-menu')?.classList.contains('open')) {
+      document.getElementById('overflow-menu').classList.remove('open');
+      if (e.key === 'Escape') return;
+      // Let other keys fall through after closing menu
+    }
+
     // --- Modal open? Only Escape should work ---
     if (document.getElementById('help-modal').classList.contains('open')) {
       if (e.key === 'Escape' || e.key === '?') closeHelp();
@@ -634,7 +642,7 @@ function bindEvents() {
             if (getIframeDocument()) {
               e.preventDefault();
               enterReviewMode(getIframeDocument());
-              showReviewBar();
+              if (isReviewMode()) showReviewBar();
             }
             break;
           case 'k':
@@ -686,7 +694,7 @@ function bindEvents() {
     const iframeDoc = getIframeDocument();
     if (iframeDoc) {
       enterReviewMode(iframeDoc);
-      showReviewBar();
+      if (isReviewMode()) showReviewBar();
     }
   }));
 
@@ -912,9 +920,10 @@ function toggleFocusMode() {
   const app = document.getElementById('app');
   const entering = !app.classList.contains('focus-mode');
   if (entering) {
-    // Close panels/modals before entering focus mode
+    // Close panels/modals/reference before entering focus mode
     document.getElementById('toc-panel').classList.remove('open');
     closeVocabPanel();
+    closeReference();
     closeSettings();
     closeHelp();
   }
@@ -956,6 +965,14 @@ function openSettings() {
   const defLangSelect = document.getElementById('settings-def-lang');
   if (bookLangSelect) bookLangSelect.value = state.currentLanguage;
   if (defLangSelect) defLangSelect.value = state.defLanguage;
+
+  // Sync font size slider and preview
+  const fontSlider = document.getElementById('settings-font-size');
+  const fontValue = document.getElementById('font-size-value');
+  const fontPreview = document.getElementById('font-preview');
+  if (fontSlider) fontSlider.value = state.fontSize;
+  if (fontValue) fontValue.textContent = `${state.fontSize}px`;
+  if (fontPreview) fontPreview.style.fontSize = `${state.fontSize}px`;
 
   // Set the dropdown to the currently active provider
   const settings = loadDictSettings();

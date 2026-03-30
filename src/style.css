@@ -1593,6 +1593,10 @@ body.ref-resizing iframe {
   .bottom-bar-review {
     display: none !important;
   }
+  .bottom-bar-stats {
+    flex: 1;
+    justify-content: center;
+  }
 
 
   /* Hide low-frequency actions on mobile toolbar */
