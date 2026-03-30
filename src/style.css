@@ -1272,6 +1272,24 @@ body.ref-resizing iframe {
   font-size: 12px;
 }
 
+.vb-refetch-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vb-refetch-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* === Combined Bottom Bar (stats + hints/review) === */
 .bottom-bar {
   display: flex;

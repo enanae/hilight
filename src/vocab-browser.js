@@ -425,7 +425,11 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
   // (typically 10-200 words instead of thousands).
   cancelLemmaFetch();
   const savedWords = state.vocab.dbWords.map(w => w.word);
-  const uncached = savedWords.filter(w => !state.vocab.lemmaMap.has(w));
+  // Re-fetch words that are uncached OR previously failed (null value)
+  const uncached = savedWords.filter(w => {
+    const v = state.vocab.lemmaMap.get(w);
+    return v === undefined || v === null;
+  });
 
   if (uncached.length > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
     const controller = new AbortController();
@@ -594,7 +598,11 @@ function renderList() {
     const isSingle = words.length === 1;
 
     // Check if this group is lemma-verified or stemmer-fallback
-    const isLemmaVerified = words.some(w => state.vocab.lemmaMap?.has(w.word));
+    // Verified = at least one word has a non-null lemma in the cache
+    const isLemmaVerified = words.some(w => {
+      const l = state.vocab.lemmaMap?.get(w.word);
+      return l != null; // string = verified, null/undefined = not
+    });
 
     if (isSingle) {
       const w = words[0];
@@ -700,8 +708,12 @@ async function toggleWordDetail(row) {
   // prioritizes the BOOK language (not the definition language).
   // This matters for words like "farer" which exist in English as a real
   // word but in Norwegian is a form of "fare".
+  // Re-fetch lemma if not cached or if previously failed (null).
+  // Null means a previous fetch failed (e.g. wrong language priority
+  // or network error) — always retry on explicit user expand.
   let needsRegroup = false;
-  if (!state.vocab.lemmaMap?.has(word)) {
+  const currentLemma = state.vocab.lemmaMap?.get(word);
+  if (currentLemma == null) {
     if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
     try {
       const lemmaResult = await fetchLemmas(state.currentLanguage, [word]);
@@ -770,6 +782,23 @@ async function toggleWordDetail(row) {
   if (!detail.querySelector('.vb-detail-sentences')) {
     detail.innerHTML = html || '<div class="vb-detail-empty">No definition available</div>';
   }
+
+  // Add re-fetch button for manual cache reset
+  const refetchBtn = document.createElement('button');
+  refetchBtn.className = 'vb-refetch-btn';
+  refetchBtn.textContent = '\u21BB Re-fetch';
+  refetchBtn.title = 'Clear cached data and re-fetch from Wiktionary';
+  refetchBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    // Clear caches for this word
+    state.vocab.lemmaMap?.delete(word);
+    await putLemmas([{ language: state.currentLanguage, word, lemma: null }]).catch(() => {});
+    // Re-expand (will re-fetch)
+    detail.remove();
+    row.querySelector('.vb-expand-btn').textContent = '\u25B8';
+    await toggleWordDetail(row);
+  });
+  detail.appendChild(refetchBtn);
 
   // If the lemma resolved to a different group, re-render the list
   // so the word moves to its correct location.
