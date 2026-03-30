@@ -1177,6 +1177,89 @@ body.ref-resizing iframe {
   color: var(--known);
 }
 
+/* === Word Detail Expansion === */
+.vb-expand-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.vb-expand-btn:hover {
+  color: var(--accent);
+}
+
+.vb-word-detail {
+  padding: 8px 12px 8px 24px;
+  border-left: 2px solid var(--accent);
+  margin-left: 12px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.vb-detail-lemma {
+  font-style: italic;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.vb-detail-defs {
+  margin-bottom: 8px;
+}
+
+.vb-detail-headword {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.vb-detail-def {
+  margin-top: 2px;
+}
+
+.vb-detail-def em {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.vb-detail-sentences {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.vb-sentence {
+  margin-bottom: 6px;
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vb-sentence strong {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.vb-detail-loading {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.vb-detail-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
 /* === Combined Bottom Bar (stats + hints/review) === */
 .bottom-bar {
   display: flex;

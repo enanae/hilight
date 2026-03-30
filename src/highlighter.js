@@ -6,7 +6,7 @@
  * Event handling is done in epub-reader.js via epubjs's rendition events.
  */
 import { tokenize, normalizeWord, langToLocale } from './tokenizer.js';
-import { getLevel, setLevel, getLevels } from './vocab-store.js';
+import { getLevel, setLevel, getLevels, cacheDefinition } from './vocab-store.js';
 import { lookupWord, hasDictionary } from './dictionary.js';
 import { state } from './app-state.js';
 import { escapeHtml } from './ui-utils.js';
@@ -205,6 +205,11 @@ async function showDefinition(anchor, language, word) {
   positionPopup(popup, anchor, doc);
 
   const result = await lookupWord(language, word);
+
+  // Opportunistically cache the definition for the vocab panel detail view
+  if (result && !result.error && result.definitions?.length > 0) {
+    cacheDefinition(language, word, result).catch(() => {});
+  }
 
   if (!result || result.error || !result.definitions || result.definitions.length === 0) {
     const isOffline = result?.error === 'offline';

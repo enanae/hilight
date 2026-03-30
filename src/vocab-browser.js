@@ -76,8 +76,9 @@
  * "In this book" mode: scans the full epub spine and builds a word list
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  */
-import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab, exportVocab, getLemmaCache, putLemmas } from './vocab-store.js';
-import { getAllBookWords } from './epub-reader.js';
+import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab, exportVocab, getLemmaCache, putLemmas, getCachedDefinition, cacheDefinition } from './vocab-store.js';
+import { getAllBookWords, findWordContexts, isBookLoaded } from './epub-reader.js';
+import { lookupWord } from './dictionary.js';
 import { stem } from './stemmer.js';
 import { fetchLemmas } from './lemma-fetcher.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN, markAllKnown, restoreWordLevels } from './highlighter.js';
@@ -232,6 +233,15 @@ function ensurePanel() {
       return;
     }
 
+    // Expand button → show word detail
+    const expandBtn = e.target.closest('.vb-expand-btn');
+    if (expandBtn) {
+      const row = expandBtn.closest('.vb-word-row');
+      if (row) toggleWordDetail(row);
+      return;
+    }
+
+    // Word text or badge → cycle level
     const row = e.target.closest('.vb-word-row');
     if (row) {
       cycleWord(row.dataset.word);
@@ -586,6 +596,7 @@ function renderList() {
     if (isSingle) {
       const w = words[0];
       html += `<div class="vb-word-row vb-flat-row" data-word="${escapeHtml(w.word)}">
+        <button class="vb-expand-btn" title="Show details">&#9656;</button>
         <span class="vb-word-text">${escapeHtml(w.word)}</span>
         <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
       </div>`;
@@ -603,6 +614,7 @@ function renderList() {
         <div class="vb-group-body">`;
       for (const w of words) {
         html += `<div class="vb-word-row" data-word="${escapeHtml(w.word)}">
+          <button class="vb-expand-btn" title="Show details">&#9656;</button>
           <span class="vb-word-text">${escapeHtml(w.word)}</span>
           <span class="vb-badge ${LEVEL_CLASSES[w.level]}">${LEVEL_SYMBOLS[w.level]}</span>
         </div>`;
@@ -630,6 +642,110 @@ async function cycleWord(word) {
   updateRowBadge(word, newLevel);
   syncReaderSpans(word, newLevel);
   if (state.vocab.onStatsUpdate) state.vocab.onStatsUpdate();
+}
+
+// ── Expandable Word Detail ────────────────────────────────────────────
+
+let activeDetailController = null; // AbortController for sentence fetch
+
+async function toggleWordDetail(row) {
+  const word = row.dataset.word;
+  const existingDetail = row.nextElementSibling;
+
+  // Collapse if already expanded
+  if (existingDetail?.classList.contains('vb-word-detail')) {
+    if (activeDetailController) { activeDetailController.abort(); activeDetailController = null; }
+    existingDetail.remove();
+    row.querySelector('.vb-expand-btn').textContent = '\u25B8'; // ▸
+    return;
+  }
+
+  // Cancel any previous detail fetch
+  if (activeDetailController) { activeDetailController.abort(); activeDetailController = null; }
+
+  // Collapse any other open detail
+  state.vocab.panelEl.querySelectorAll('.vb-word-detail').forEach(el => {
+    el.previousElementSibling?.querySelector('.vb-expand-btn')?.replaceChildren(document.createTextNode('\u25B8'));
+    el.remove();
+  });
+
+  // Create detail element
+  row.querySelector('.vb-expand-btn').textContent = '\u25BE'; // ▾
+  const detail = document.createElement('div');
+  detail.className = 'vb-word-detail';
+  detail.innerHTML = '<div class="vb-detail-loading">Loading...</div>';
+  row.after(detail);
+
+  // 1. Show lemma relation immediately (from cache)
+  const lemma = state.vocab.lemmaMap?.get(word);
+  let html = '';
+
+  // 2. Fetch definition (cache first, then API)
+  let defResult = await getCachedDefinition(state.currentLanguage, word);
+  if (!defResult) {
+    try {
+      defResult = await lookupWord(state.currentLanguage, word);
+      if (defResult && !defResult.error) {
+        await cacheDefinition(state.currentLanguage, word, defResult).catch(() => {});
+      }
+    } catch { defResult = null; }
+  }
+
+  if (defResult && !defResult.error) {
+    // Show lemma relation
+    if (lemma && lemma !== word) {
+      const formOf = defResult.definitions?.[0]?.definition || '';
+      html += `<div class="vb-detail-lemma">${escapeHtml(formOf)}</div>`;
+    }
+    // Show stem definitions (more useful than inflected form's definition)
+    const defs = defResult.stemDefinitions || defResult.definitions || [];
+    if (defs.length > 0) {
+      const defWord = defResult.stemWord || defResult.word || word;
+      html += `<div class="vb-detail-defs">`;
+      html += `<span class="vb-detail-headword">${escapeHtml(defWord)}</span>`;
+      for (const d of defs.slice(0, 3)) {
+        html += `<div class="vb-detail-def">`;
+        if (d.partOfSpeech) html += `<em>${escapeHtml(d.partOfSpeech)}</em> `;
+        html += escapeHtml(d.definition);
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+  } else {
+    html += `<div class="vb-detail-empty">No definition available</div>`;
+  }
+
+  // 3. Fetch sentence contexts from book (if open)
+  if (isBookLoaded()) {
+    html += `<div class="vb-detail-sentences"><span class="vb-detail-loading">Searching book...</span></div>`;
+    detail.innerHTML = html;
+
+    activeDetailController = new AbortController();
+    const controller = activeDetailController;
+    try {
+      const contexts = await findWordContexts(word, 5, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const sentEl = detail.querySelector('.vb-detail-sentences');
+      if (sentEl) {
+        if (contexts.length > 0) {
+          // Highlight the word in each sentence
+          const wordRe = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+          sentEl.innerHTML = contexts.map(c =>
+            `<div class="vb-sentence">\u201C${escapeHtml(c.text).replace(wordRe, '<strong>$1</strong>')}\u201D</div>`
+          ).join('');
+        } else {
+          sentEl.innerHTML = '<div class="vb-detail-empty">No examples found in this book</div>';
+        }
+      }
+    } catch { /* aborted or failed — leave as is */ }
+    activeDetailController = null;
+  } else {
+    detail.innerHTML = html || '<div class="vb-detail-empty">No definition available</div>';
+  }
+
+  if (!detail.querySelector('.vb-detail-sentences')) {
+    detail.innerHTML = html || '<div class="vb-detail-empty">No definition available</div>';
+  }
 }
 
 /**

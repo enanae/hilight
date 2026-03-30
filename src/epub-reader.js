@@ -535,6 +535,61 @@ export async function getAllBookWords(onProgress) {
   return words;
 }
 
+/**
+ * Find sentence contexts for a word in the current book.
+ * Searches spine sections for paragraphs containing the word,
+ * extracts the surrounding sentence, and returns up to `max` results.
+ * @param {string} word - the word to search for
+ * @param {number} [max=5] - maximum number of contexts to return
+ * @param {object} [options]
+ * @param {AbortSignal} [options.signal] - abort signal for cancellation
+ * @returns {Promise<Array<{text: string}>>}
+ */
+export async function findWordContexts(word, max = 5, { signal } = {}) {
+  if (!state.currentBook) return [];
+  const locale = langToLocale(state.currentLanguage);
+  const normalized = normalizeWord(word, locale).toLowerCase();
+  if (!normalized) return [];
+
+  const contexts = [];
+  const items = state.currentBook.spine.items;
+
+  for (let i = 0; i < items.length && contexts.length < max; i++) {
+    if (signal?.aborted) break;
+    try {
+      const { body, unload } = await loadSectionForScan(state.currentBook, items[i].index);
+      if (!body) { unload(); continue; }
+
+      const paras = body.querySelectorAll('p, li, blockquote, dd');
+      for (const para of paras) {
+        if (contexts.length >= max) break;
+        const text = para.textContent?.trim();
+        if (!text || text.length < 10) continue;
+
+        // Check if this paragraph contains the word
+        const lowerText = text.toLowerCase();
+        if (!lowerText.includes(normalized)) continue;
+
+        // Extract a sentence containing the word (split on sentence boundaries)
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        for (const sent of sentences) {
+          if (contexts.length >= max) break;
+          if (sent.toLowerCase().includes(normalized)) {
+            // Avoid duplicates
+            const trimmed = sent.trim();
+            if (trimmed.length > 10 && !contexts.some(c => c.text === trimmed)) {
+              contexts.push({ text: trimmed });
+            }
+          }
+        }
+      }
+      unload();
+    } catch { /* skip failed sections */ }
+  }
+
+  return contexts;
+}
+
 function showLoadingOverlay(viewerEl) {
   let overlay = viewerEl.querySelector('.hl-loading-overlay');
   if (!overlay) {

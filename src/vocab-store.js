@@ -7,9 +7,10 @@
  */
 
 const DB_NAME = 'hilight-vocab';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'words';
 const LEMMA_STORE = 'lemma-cache';
+const DICT_CACHE_STORE = 'definition-cache';
 
 let dbPromise = null;
 
@@ -27,6 +28,9 @@ function openDB() {
       if (!db.objectStoreNames.contains(LEMMA_STORE)) {
         const lstore = db.createObjectStore(LEMMA_STORE, { keyPath: ['language', 'word'] });
         lstore.createIndex('by_language', 'language', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(DICT_CACHE_STORE)) {
+        db.createObjectStore(DICT_CACHE_STORE, { keyPath: ['language', 'word'] });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -207,4 +211,27 @@ export async function clearLemmaCache(language) {
   const store = await tx('readwrite', LEMMA_STORE);
   const all = await idbReq(store.index('by_language').getAllKeys(language));
   await Promise.all(all.map(k => idbReq(store.delete(k))));
+}
+
+// ─── Definition Cache ────────────────────────────────────────────────
+
+/**
+ * Get a cached dictionary definition.
+ * Returns the definition object or null if not cached.
+ */
+export async function getCachedDefinition(language, word) {
+  const store = await tx('readonly', DICT_CACHE_STORE);
+  const result = await idbReq(store.get([language, word]));
+  return result ? result.definition : null;
+}
+
+/**
+ * Cache a dictionary definition result.
+ * @param {string} language
+ * @param {string} word
+ * @param {object} definition - the result from lookupWord() (word, phonetic, definitions, stemWord, stemDefinitions)
+ */
+export async function cacheDefinition(language, word, definition) {
+  const store = await tx('readwrite', DICT_CACHE_STORE);
+  await idbReq(store.put({ language, word, definition }));
 }
