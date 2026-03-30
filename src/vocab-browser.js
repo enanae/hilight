@@ -693,38 +693,30 @@ async function toggleWordDetail(row) {
   const lemma = state.vocab.lemmaMap?.get(word);
   let html = '';
 
-  // 2. Fetch definition (cache first, then API)
-  let defResult = await getCachedDefinition(state.currentLanguage, word);
-  if (!defResult) {
-    try {
-      defResult = await lookupWord(state.currentLanguage, word);
-      if (defResult && !defResult.error) {
-        await cacheDefinition(state.currentLanguage, word, defResult).catch(() => {});
-      }
-    } catch { defResult = null; }
-  }
+  // 2. Fetch definition — always re-fetch on expand to get fresh data
+  // (cached definitions may be from wrong language due to earlier bug)
+  let defResult = null;
+  try {
+    defResult = await lookupWord(state.currentLanguage, word);
+    if (defResult && !defResult.error) {
+      await cacheDefinition(state.currentLanguage, word, defResult).catch(() => {});
+    }
+  } catch { defResult = await getCachedDefinition(state.currentLanguage, word); }
 
-  // 2b. Resolve lemma if not cached — use fetchLemmas which correctly
-  // prioritizes the BOOK language (not the definition language).
-  // This matters for words like "farer" which exist in English as a real
-  // word but in Norwegian is a form of "fare".
-  // Re-fetch lemma if not cached or if previously failed (null).
-  // Null means a previous fetch failed (e.g. wrong language priority
-  // or network error) — always retry on explicit user expand.
+  // 2b. Always resolve lemma on expand — user clicked explicitly, so
+  // re-fetch even if cached (the cache may have stale wrong-language data).
   let needsRegroup = false;
-  const currentLemma = state.vocab.lemmaMap?.get(word);
-  if (currentLemma == null) {
-    if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
-    try {
-      const lemmaResult = await fetchLemmas(state.currentLanguage, [word]);
-      const resolvedLemma = lemmaResult.get(word);
-      if (resolvedLemma != null) {
-        state.vocab.lemmaMap.set(word, resolvedLemma);
-        await putLemmas([{ language: state.currentLanguage, word, lemma: resolvedLemma }]).catch(() => {});
-        if (resolvedLemma !== word) needsRegroup = true;
-      }
-    } catch { /* network error — leave ungrouped */ }
-  }
+  if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
+  try {
+    const lemmaResult = await fetchLemmas(state.currentLanguage, [word]);
+    const resolvedLemma = lemmaResult.get(word);
+    if (resolvedLemma != null) {
+      const previousLemma = state.vocab.lemmaMap.get(word);
+      state.vocab.lemmaMap.set(word, resolvedLemma);
+      await putLemmas([{ language: state.currentLanguage, word, lemma: resolvedLemma }]).catch(() => {});
+      if (resolvedLemma !== previousLemma) needsRegroup = true;
+    }
+  } catch { /* network error — leave as is */ }
 
   if (defResult && !defResult.error) {
     // Show lemma relation
