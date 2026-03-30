@@ -696,20 +696,22 @@ async function toggleWordDetail(row) {
     } catch { defResult = null; }
   }
 
-  // 2b. If we discovered the lemma and it's not cached, update the cache
-  // and schedule a re-render to move the word to its correct group.
+  // 2b. Resolve lemma if not cached — use fetchLemmas which correctly
+  // prioritizes the BOOK language (not the definition language).
+  // This matters for words like "farer" which exist in English as a real
+  // word but in Norwegian is a form of "fare".
   let needsRegroup = false;
-  if (defResult && !defResult.error && defResult.stemWord && !state.vocab.lemmaMap?.has(word)) {
-    const resolvedLemma = defResult.stemWord;
+  if (!state.vocab.lemmaMap?.has(word)) {
     if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
-    state.vocab.lemmaMap.set(word, resolvedLemma);
-    await putLemmas([{ language: state.currentLanguage, word, lemma: resolvedLemma }]).catch(() => {});
-    needsRegroup = true;
-  } else if (defResult && !defResult.error && !defResult.stemWord && !state.vocab.lemmaMap?.has(word)) {
-    // Word IS a lemma — cache it as itself
-    if (!state.vocab.lemmaMap) state.vocab.lemmaMap = new Map();
-    state.vocab.lemmaMap.set(word, word);
-    await putLemmas([{ language: state.currentLanguage, word, lemma: word }]).catch(() => {});
+    try {
+      const lemmaResult = await fetchLemmas(state.currentLanguage, [word]);
+      const resolvedLemma = lemmaResult.get(word);
+      if (resolvedLemma != null) {
+        state.vocab.lemmaMap.set(word, resolvedLemma);
+        await putLemmas([{ language: state.currentLanguage, word, lemma: resolvedLemma }]).catch(() => {});
+        if (resolvedLemma !== word) needsRegroup = true;
+      }
+    } catch { /* network error — leave ungrouped */ }
   }
 
   if (defResult && !defResult.error) {
