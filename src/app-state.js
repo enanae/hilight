@@ -73,6 +73,8 @@ export const state = {
     onStatsUpdate: null,
     iframeDocGetter: null,
     openInProgress: false,
+    lemmaMap: null,              // Map<word, lemma|null> from cache
+    lemmaFetchController: null,  // AbortController for background fetch
   },
 };
 
@@ -117,6 +119,8 @@ export function resetState() {
     onStatsUpdate: null,
     iframeDocGetter: null,
     openInProgress: false,
+    lemmaMap: null,
+    lemmaFetchController: null,
   });
 }
 

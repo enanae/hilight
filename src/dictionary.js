@@ -63,7 +63,7 @@ function stripHtml(html) {
  * These definitions look like: "third-person plural future indicative of <a>desaparecer</a>"
  * Returns the stem word if found, null otherwise.
  */
-function extractStemWord(definitionHtml) {
+export function extractStemWord(definitionHtml) {
   if (!definitionHtml) return null;
   // Look for the pattern: form-of-definition-link containing an <a> tag with the stem word
   const match = definitionHtml.match(/form-of-definition-link[^>]*>.*?<a[^>]*>([^<]+)<\/a>/);

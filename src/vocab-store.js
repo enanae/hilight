@@ -7,8 +7,9 @@
  */
 
 const DB_NAME = 'hilight-vocab';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'words';
+const LEMMA_STORE = 'lemma-cache';
 
 let dbPromise = null;
 
@@ -23,6 +24,10 @@ function openDB() {
         store.createIndex('by_language', 'language', { unique: false });
         store.createIndex('by_level', ['language', 'level'], { unique: false });
       }
+      if (!db.objectStoreNames.contains(LEMMA_STORE)) {
+        const lstore = db.createObjectStore(LEMMA_STORE, { keyPath: ['language', 'word'] });
+        lstore.createIndex('by_language', 'language', { unique: false });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => {
@@ -33,10 +38,10 @@ function openDB() {
   return dbPromise;
 }
 
-function tx(mode) {
+function tx(mode, storeName = STORE_NAME) {
   return openDB().then(db => {
-    const t = db.transaction(STORE_NAME, mode);
-    return t.objectStore(STORE_NAME);
+    const t = db.transaction(storeName, mode);
+    return t.objectStore(storeName);
   });
 }
 
@@ -171,4 +176,35 @@ export async function importVocab(entries) {
   if (valid.length === 0) return;
   const store = await tx('readwrite');
   await Promise.all(valid.map(e => idbReq(store.put(e))));
+}
+
+// ─── Lemma Cache ─────────────────────────────────────────────────────
+
+/**
+ * Get all cached lemmas for a language.
+ * Returns Map<word, lemma|null>. null means "checked, not in Wiktionary".
+ */
+export async function getLemmaCache(language) {
+  const store = await tx('readonly', LEMMA_STORE);
+  const all = await idbReq(store.index('by_language').getAll(language));
+  const map = new Map();
+  for (const r of all) map.set(r.word, r.lemma);
+  return map;
+}
+
+/**
+ * Bulk-write lemma cache entries.
+ * Each entry: { language, word, lemma } where lemma is string or null.
+ */
+export async function putLemmas(entries) {
+  if (entries.length === 0) return;
+  const store = await tx('readwrite', LEMMA_STORE);
+  await Promise.all(entries.map(e => idbReq(store.put(e))));
+}
+
+/** Clear all cached lemmas for a language. */
+export async function clearLemmaCache(language) {
+  const store = await tx('readwrite', LEMMA_STORE);
+  const all = await idbReq(store.index('by_language').getAllKeys(language));
+  await Promise.all(all.map(k => idbReq(store.delete(k))));
 }

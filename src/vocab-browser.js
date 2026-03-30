@@ -76,14 +76,24 @@
  * "In this book" mode: scans the full epub spine and builds a word list
  *   from the BOOK, then looks up each word's level from the DB (default 0).
  */
-import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab, exportVocab } from './vocab-store.js';
+import { getAllWords, setLevel, deleteAllWords, deleteWordsList, importVocab, exportVocab, getLemmaCache, putLemmas } from './vocab-store.js';
 import { getAllBookWords } from './epub-reader.js';
 import { stem } from './stemmer.js';
+import { fetchLemmas } from './lemma-fetcher.js';
 import { LEVEL_PARTIAL, LEVEL_KNOWN, markAllKnown, restoreWordLevels } from './highlighter.js';
 import { state } from './app-state.js';
 import { escapeHtml, showUndoToast } from './ui-utils.js';
 
 const LEVEL_CLASSES = ['vb-unknown', 'vb-partial', 'vb-known'];
+
+/**
+ * Get the grouping key for a word: use Wiktionary lemma if cached,
+ * otherwise fall back to the suffix-stripping stemmer.
+ */
+function getGroupKey(word) {
+  const lemma = state.vocab.lemmaMap?.get(word);
+  return (lemma != null) ? lemma : stem(word, state.currentLanguage);
+}
 const LEVEL_SYMBOLS = ['?', '~', '\u2713'];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -388,8 +398,45 @@ export async function openPanel(language, { bookId = null, onStatsUpdate: statsC
 
   await rebuildDisplayWords();
 
+  // Load cached lemmas for grouping
+  try {
+    state.vocab.lemmaMap = await getLemmaCache(state.currentLanguage);
+  } catch (err) {
+    console.warn('[vocab] getLemmaCache failed:', err);
+    state.vocab.lemmaMap = new Map();
+  }
+
   state.vocab.panelEl.classList.add('open');
   renderList();
+
+  // Background-fetch lemmas for words not yet cached.
+  // The panel renders immediately with stemmer groups; as lemmas arrive,
+  // it silently re-renders with improved grouping.
+  cancelLemmaFetch();
+  const uncached = state.vocab.displayWords
+    .map(w => w.word)
+    .filter(w => !state.vocab.lemmaMap.has(w));
+
+  if (uncached.length > 0 && typeof navigator !== 'undefined' && navigator.onLine) {
+    const controller = new AbortController();
+    state.vocab.lemmaFetchController = controller;
+
+    fetchLemmas(state.currentLanguage, uncached, { signal: controller.signal })
+      .then(async (newLemmas) => {
+        if (controller.signal.aborted) return;
+        // Persist to cache
+        const entries = [];
+        for (const [word, lemma] of newLemmas) {
+          entries.push({ language: state.currentLanguage, word, lemma });
+          state.vocab.lemmaMap.set(word, lemma);
+        }
+        if (entries.length > 0) {
+          await putLemmas(entries).catch(() => {}); // best-effort persist
+          renderList(); // re-render with improved grouping
+        }
+      })
+      .catch(() => {}); // silently ignore network failures
+  }
 }
 
 /**
@@ -421,7 +468,15 @@ async function rebuildDisplayWords() {
 }
 
 export function closePanel() {
+  cancelLemmaFetch();
   if (state.vocab.panelEl) state.vocab.panelEl.classList.remove('open');
+}
+
+function cancelLemmaFetch() {
+  if (state.vocab.lemmaFetchController) {
+    state.vocab.lemmaFetchController.abort();
+    state.vocab.lemmaFetchController = null;
+  }
 }
 
 export function isOpen() {
@@ -508,7 +563,7 @@ function renderList() {
   // 4. Group by stem
   const groups = new Map();
   for (const w of filtered) {
-    const s = stem(w.word, state.currentLanguage);
+    const s = getGroupKey(w.word);
     if (!groups.has(s)) groups.set(s, []);
     groups.get(s).push(w);
   }
@@ -584,7 +639,7 @@ async function markGroup(stemKey, targetLevel) {
   const previousState = [];
   const updates = [];
   for (const entry of state.vocab.displayWords) {
-    if (stem(entry.word, state.currentLanguage) === stemKey && entry.level !== targetLevel) {
+    if (getGroupKey(entry.word) === stemKey && entry.level !== targetLevel) {
       previousState.push({ word: entry.word, level: entry.level });
       entry.level = targetLevel;
       updates.push(setLevel(state.currentLanguage, entry.word, targetLevel));

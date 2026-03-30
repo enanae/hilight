@@ -138,12 +138,9 @@ function renderApp() {
               </div>
               <div id="bottom-bar-review" class="bottom-bar-review" style="display:none">
                 <span class="review-bar-label">REVIEW</span>
-                <span class="review-bar-keys"><kbd>&#8592;</kbd><kbd>&#8594;</kbd> word</span>
-                <span class="review-bar-keys"><kbd>&#8593;</kbd><kbd>&#8595;</kbd> line</span>
-                <span class="review-bar-keys"><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> grade</span>
-                <span class="review-bar-keys"><kbd>d</kbd> define</span>
+                <span class="review-bar-keys"><kbd>&#8592;</kbd><kbd>&#8594;</kbd><kbd>&#8593;</kbd><kbd>&#8595;</kbd> navigate</span>
+                <span class="review-bar-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> grade</span>
                 <span class="review-bar-keys"><kbd>Space</kbd> next</span>
-                <span id="review-bar-filter" class="review-bar-keys"><kbd>a</kbd> all</span>
                 <button id="btn-exit-review" class="review-exit-btn" title="Exit review mode">&#10005; Exit</button>
               </div>
             </div>
@@ -1125,8 +1122,8 @@ function hideReadingHint() {
 }
 
 function updateReviewBarFilter() {
-  const el = document.getElementById('review-bar-filter');
-  if (el) el.innerHTML = `<kbd>a</kbd> ${isShowingAll() ? 'unlearned' : 'all'}`;
+  // Filter toggle (a key) hint was removed from the simplified review bar
+  // to reduce visual clutter. The feature still works via keyboard.
 }
 
 // --- Help modal ---
