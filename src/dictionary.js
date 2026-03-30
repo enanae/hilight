@@ -103,15 +103,25 @@ function parseWiktionary(data, lang, defLang) {
   // The response is keyed by language code. Priority:
   // 1. Try the definition language (user's native language) for bilingual use
   // 2. Try the book language
-  // 3. Try "other" (Wiktionary groups Norwegian Bokmål/Nynorsk and some
-  //    other languages under this key)
+  // 3. Try "other" (filtered to the book language — Wiktionary groups
+  //    Norwegian, Danish, etc. under this key with mixed languages)
   // 4. Fall back to any available key
   let sections = null;
-  for (const tryLang of [defLang, lang, 'other']) {
+  for (const tryLang of [defLang, lang]) {
     if (tryLang && Array.isArray(data[tryLang]) && data[tryLang].length > 0) {
       sections = data[tryLang];
       break;
     }
+  }
+  if (!sections && Array.isArray(data['other']) && data['other'].length > 0) {
+    // Filter "other" to the book language to avoid cross-language contamination
+    const langNames = { nb: 'Norwegian Bokmål', nn: 'Norwegian Nynorsk', da: 'Danish', sv: 'Swedish', fi: 'Finnish' };
+    const targetName = langNames[lang];
+    if (targetName) {
+      const filtered = data['other'].filter(s => s.language === targetName);
+      if (filtered.length > 0) sections = filtered;
+    }
+    if (!sections) sections = data['other'];
   }
   if (!sections) {
     const keys = Object.keys(data);

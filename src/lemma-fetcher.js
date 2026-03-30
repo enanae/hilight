@@ -14,6 +14,27 @@ import { PROVIDERS, extractStemWord } from './dictionary.js';
 
 const MAX_CONCURRENT = 5;
 
+/** Map language codes to Wiktionary language names for filtering "other" sections */
+const LANG_NAMES = {
+  nb: 'Norwegian Bokmål',
+  nn: 'Norwegian Nynorsk',
+  da: 'Danish',
+  sv: 'Swedish',
+  fi: 'Finnish',
+};
+
+/**
+ * Filter sections to only those matching the target language.
+ * The Wiktionary "other" key groups multiple languages together,
+ * so we need to filter by the `language` field in each section.
+ */
+function filterSectionsForLanguage(sections, langCode) {
+  const targetName = LANG_NAMES[langCode];
+  if (!targetName) return sections; // no filtering needed
+  const filtered = sections.filter(s => s.language === targetName);
+  return filtered.length > 0 ? filtered : sections; // fallback to all if no match
+}
+
 /**
  * Fetch lemmas for a batch of words.
  * @param {string} language - language code
@@ -80,23 +101,15 @@ async function fetchOneLemma(language, word, signal) {
 
   const data = await res.json();
 
-  // Use same language fallback chain as parseWiktionary:
-  // try defLang → lang → 'other' → any key
+  // Find sections for the target language.
+  // Priority: exact lang code → "other" (filtered to target language) → skip
   let sections = null;
-  for (const tryLang of [language, 'other']) {
-    if (tryLang && Array.isArray(data[tryLang]) && data[tryLang].length > 0) {
-      sections = data[tryLang];
-      break;
-    }
+  if (Array.isArray(data[language]) && data[language].length > 0) {
+    sections = data[language];
+  } else if (Array.isArray(data['other']) && data['other'].length > 0) {
+    sections = filterSectionsForLanguage(data['other'], language);
   }
-  if (!sections) {
-    for (const k of Object.keys(data)) {
-      if (Array.isArray(data[k]) && data[k].length > 0) {
-        sections = data[k];
-        break;
-      }
-    }
-  }
+  // Do NOT fall back to any key — wrong-language results cause false groupings
   if (!sections || sections.length === 0) return null;
 
   // Check first definition for form-of link
